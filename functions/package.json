@@ -6,11 +6,12 @@
     "node": "24"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && npm run build:web",
     "test": "vitest run",
     "test:watch": "vitest",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "build:web": "tsc -p tsconfig.web.json && node scripts/fix-esm-imports.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.73.0",

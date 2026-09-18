@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "module": "es2022",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "strict": true,
+    "outDir": "../public/lib",
+    "declaration": false,
+    "sourceMap": false
+  },
+  // The pure modules only. Shipping the same source to both sides is what
+  // stops the conversion and game-matching rules from drifting between the
+  // confirmation screen and the server that stores the result.
+  "files": ["src/stairs.ts", "src/games.ts", "src/confirmState.ts"]
+}
