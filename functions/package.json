@@ -20,7 +20,7 @@
     "firebase-functions": "^7.3.2",
     "heic-convert": "^2.1.0",
     "sharp": "^0.35.3",
-    "zod": "^3.24.0"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/busboy": "^1.5.4",
