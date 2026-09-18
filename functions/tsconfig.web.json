@@ -4,6 +4,9 @@
     "moduleResolution": "bundler",
     "target": "es2022",
     "strict": true,
+    // Matches the main config: a transitive @types mismatch in a dependency
+    // must not fail the hosting predeploy build.
+    "skipLibCheck": true,
     "outDir": "../public/lib",
     "declaration": false,
     "sourceMap": false
