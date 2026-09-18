@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Images are written by Cloud Functions only. Clients read their own.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{uid}/{allPaths=**} {
+      allow read: if request.auth != null && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}
