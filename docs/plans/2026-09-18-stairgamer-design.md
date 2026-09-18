@@ -133,10 +133,23 @@ Response shape:
 
 ### Canonical game names
 
-A detected name is normalised (lowercase, strip punctuation, leading `the`,
-subtitle after `:`) and matched against existing `games`. A hit reuses the
-**stored** canonical name, so "Zelda TOTK" and "The Legend of Zelda: Tears of the
-Kingdom" cannot become two rows. Only a genuine miss creates a new game.
+Duplicate rows for one game are prevented in two layers, in this order:
+
+1. **The model echoes the canonical string.** The candidate list sent in the
+   prompt contains the exact stored names, and the model is instructed to return
+   one *verbatim* when it picks a listed game. This is the primary mechanism and
+   the only one that can handle an abbreviation.
+2. **Normalised exact match**, as a safety net for case and punctuation drift —
+   lowercase, strip punctuation, collapse whitespace, drop a leading `the`. This
+   catches `The Legend of Zelda: Tears of the Kingdom` vs
+   `The Legend of Zelda - Tears of the Kingdom`.
+
+Layer 2 deliberately does **not** do fuzzy or acronym matching: "Zelda TOTK" and
+"The Legend of Zelda: Tears of the Kingdom" do not normalise to the same string,
+and inventing a similarity threshold to bridge them would risk silently merging
+two genuinely different games (e.g. sequels sharing a prefix). The model echoing
+the canonical name is the correct fix for that case; the new-game warning in §5
+is the backstop when it fails.
 
 ## 5. Confirmation screen
 
@@ -229,7 +242,7 @@ deleted and `connected: false` returned.
 POST https://health.googleapis.com/v4/users/me/dataTypes/exercise/dataPoints
 { "exercise": {
     "interval": { "startTime": "…T18:25:00Z", "endTime": "…T19:00:00Z" },
-    "exerciseType": "STAIR_CLIMBING_MACHINE",
+    "exerciseType": "STAIRCLIMBER",
     "activeDuration": "2100s",
     "metricsSummary": { "steps": 2135 } } }
 ```
@@ -239,10 +252,11 @@ is photographed immediately after finishing. So
 `startTime = exifTime − durationSec`. Reversing this would place every workout
 one session late in the user's timeline.
 
-> The exact `STAIR_CLIMBING_MACHINE` enum spelling must be confirmed against the
-> live `Exercise.ExerciseType` enum during implementation; the published
-> reference page truncates the value list. It mirrors Health Connect's
-> `EXERCISE_TYPE_STAIR_CLIMBING_MACHINE`.
+`exerciseType` is **`STAIRCLIMBER`** (verified against the live
+`Exercise.ExerciseType` enum). Note this API inherits Google Fit's activity
+vocabulary, *not* Health Connect's — there is no
+`EXERCISE_TYPE_STAIR_CLIMBING_MACHINE` here. The only other stair-adjacent value
+is `STEP_TRAINING`, which means step aerobics, not a stair machine.
 
 ## 7. Data model
 
