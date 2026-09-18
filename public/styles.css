@@ -1,0 +1,213 @@
+/* StairGamer — the palette comes from the machines themselves: an amber
+   console readout lit against a dark gym at night. */
+:root {
+  --ground: #171A2B;
+  --surface: #212740;
+  --surface-hi: #2B3252;
+  --amber: #F2A33C;
+  --mint: #6FD8A8;
+  --coral: #E8705F;
+  --ink: #E9E7F2;
+  --ink-mute: #8D90AC;
+  --rule: #323A5E;
+
+  --step: 0.5rem;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: Archivo, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-variation-settings: "wdth" 100;
+  font-size: 17px;
+  line-height: 1.5;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1.5rem, env(safe-area-inset-bottom));
+}
+
+#app { max-width: 30rem; margin: 0 auto; }
+
+.view { display: flex; flex-direction: column; gap: 1rem; }
+[hidden] { display: none !important; }
+
+/* ---- wordmark ------------------------------------------------------- */
+.wordmark {
+  font-size: 2rem;
+  font-weight: 800;
+  font-variation-settings: "wdth" 120;
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+.wordmark span { color: var(--amber); }
+.wordmark.small { font-size: 1.15rem; }
+
+.lede { color: var(--ink-mute); margin: 0 0 1rem; max-width: 24ch; }
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+/* ---- empty state ---------------------------------------------------- */
+.empty {
+  border: 1px dashed var(--rule);
+  border-radius: var(--radius);
+  padding: 2rem 1.25rem;
+  text-align: center;
+}
+.empty-head { margin: 0 0 0.35rem; font-weight: 600; }
+.empty-sub { margin: 0; color: var(--ink-mute); font-size: 0.92rem; }
+.note { color: var(--ink-mute); font-size: 0.85rem; margin: 0; text-align: center; }
+
+/* ---- buttons -------------------------------------------------------- */
+.btn {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  padding: 0.7rem 1.1rem;
+  cursor: pointer;
+  text-align: center;
+  background: var(--surface-hi);
+  color: var(--ink);
+}
+.btn-block { display: block; width: 100%; }
+.btn-primary { background: var(--amber); color: #23180A; }
+.btn-secondary { background: transparent; border-color: var(--rule); }
+.btn-quiet { background: transparent; color: var(--ink-mute); border-color: transparent; }
+.btn:focus-visible, .edit:focus-visible, .check input:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+
+/* ---- working -------------------------------------------------------- */
+/* Five risers lighting in sequence — the one piece of ambient motion, and
+   it reads as a climb rather than a spinner. */
+.riser { display: flex; align-items: flex-end; gap: 6px; height: 64px; margin: 3rem auto 0; }
+.riser i {
+  display: block; width: 14px; background: var(--surface-hi); border-radius: 3px;
+  animation: riser 1.4s ease-in-out infinite;
+}
+.riser i:nth-child(1) { height: 20%; animation-delay: 0s; }
+.riser i:nth-child(2) { height: 40%; animation-delay: 0.12s; }
+.riser i:nth-child(3) { height: 60%; animation-delay: 0.24s; }
+.riser i:nth-child(4) { height: 80%; animation-delay: 0.36s; }
+.riser i:nth-child(5) { height: 100%; animation-delay: 0.48s; }
+@keyframes riser { 0%, 100% { background: var(--surface-hi); } 40% { background: var(--amber); } }
+.busy-label { text-align: center; color: var(--ink-mute); }
+
+@media (prefers-reduced-motion: reduce) {
+  .riser i { animation: none; background: var(--amber); opacity: 0.5; }
+}
+
+/* ---- proof ---------------------------------------------------------- */
+.proof { display: flex; gap: 0.85rem; align-items: center; }
+.proof img {
+  width: 72px; height: 72px; object-fit: cover;
+  border-radius: 10px; background: var(--surface);
+}
+.proof-meta { min-width: 0; }
+.proof-date { margin: 0; font-weight: 600; }
+.proof-machine { margin: 0; color: var(--ink-mute); font-size: 0.88rem; }
+
+/* ---- fields --------------------------------------------------------- */
+.field {
+  position: relative;
+  background: var(--surface);
+  border-radius: var(--radius);
+  padding: 0.85rem 5.5rem 0.9rem 1rem;
+}
+.field-label {
+  margin: 0; color: var(--ink-mute);
+  font-size: 0.8rem; font-weight: 600; letter-spacing: 0.02em;
+}
+.field-value {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  font-variation-settings: "wdth" 115;
+  font-weight: 700;
+  font-size: 2rem;
+  line-height: 1.15;
+  color: var(--amber);
+}
+.field-value-text {
+  font-size: 1.2rem;
+  font-variation-settings: "wdth" 100;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.field-note { margin: 0.3rem 0 0; font-size: 0.85rem; color: var(--ink-mute); }
+.note-ok { color: var(--mint); }
+.note-warn { color: var(--coral); }
+
+.edit {
+  position: absolute; top: 0.85rem; right: 0.85rem;
+  font: inherit; font-size: 0.85rem; font-weight: 600;
+  background: var(--surface-hi); color: var(--ink);
+  border: 0; border-radius: 8px; padding: 0.4rem 0.8rem; cursor: pointer;
+}
+
+/* Steps is the hero; floors is visibly derived from it — same block, tied by
+   a rule, smaller and quieter. */
+.readout {
+  background: var(--surface);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+}
+.readout .field { background: none; border-radius: 0; }
+.hero-value { font-size: 3.1rem; letter-spacing: -0.02em; }
+.field-derived { border-top: 1px solid var(--rule); }
+.field-derived .field-value { font-size: 1.5rem; color: var(--ink); }
+
+/* ---- checkbox ------------------------------------------------------- */
+.check {
+  display: flex; align-items: center; gap: 0.7rem;
+  background: var(--surface); border-radius: var(--radius);
+  padding: 0.9rem 1rem; cursor: pointer;
+}
+.check input { width: 1.2rem; height: 1.2rem; accent-color: var(--amber); flex: none; }
+
+/* ---- banners -------------------------------------------------------- */
+.banner {
+  margin: 0; padding: 0.7rem 0.9rem; border-radius: 10px; font-size: 0.9rem;
+}
+.banner-warn { background: rgba(232, 112, 95, 0.14); color: var(--coral); }
+
+/* ---- done ----------------------------------------------------------- */
+.done-mark { font-size: 2.5rem; color: var(--mint); margin: 2rem 0 0; text-align: center; }
+.done-head { margin: 0; text-align: center; font-size: 1.3rem; font-weight: 700; }
+.done-sub { margin: 0 0 1rem; text-align: center; color: var(--ink-mute); }
+
+/* ---- editor dialog -------------------------------------------------- */
+dialog {
+  border: 0; border-radius: var(--radius); padding: 0;
+  background: var(--surface); color: var(--ink);
+  width: min(26rem, calc(100vw - 2rem));
+}
+dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
+.editor-form { padding: 1.1rem; display: flex; flex-direction: column; gap: 0.7rem; }
+.editor-title { margin: 0; font-size: 1.05rem; }
+.editor-input {
+  font: inherit; font-size: 1.15rem;
+  background: var(--ground); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 10px; padding: 0.6rem 0.75rem;
+  width: 100%;
+}
+.editor-input:focus-visible { outline: 2px solid var(--amber); outline-offset: 1px; }
+.editor-hint { margin: 0; font-size: 0.85rem; color: var(--ink-mute); }
+.editor-list { display: flex; flex-direction: column; max-height: 42vh; overflow-y: auto; gap: 0.3rem; }
+.editor-list button {
+  font: inherit; text-align: left; cursor: pointer;
+  background: var(--ground); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 9px; padding: 0.55rem 0.7rem;
+}
+.editor-list button[aria-current="true"] { border-color: var(--amber); }
+.editor-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin: 0.3rem 0 0; padding: 0; }

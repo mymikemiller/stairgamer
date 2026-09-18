@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#171A2B">
+<title>StairGamer</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon-512.png">
+<link rel="apple-touch-icon" href="/icon-512.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:ital,wdth,wght@0,62..125,400..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<main id="app">
+  <!-- Signed out -->
+  <section id="view-auth" class="view">
+    <h1 class="wordmark">Stair<span>Gamer</span></h1>
+    <p class="lede">Log the climb, and the game you climbed through.</p>
+    <button id="sign-in" class="btn btn-primary">Sign in with Google</button>
+  </section>
+
+  <!-- Ready for a photo -->
+  <section id="view-pick" class="view" hidden>
+    <header class="topbar">
+      <h1 class="wordmark small">Stair<span>Gamer</span></h1>
+      <button id="sign-out" class="btn btn-quiet">Sign out</button>
+    </header>
+    <div class="empty">
+      <p class="empty-head">Share a photo of your results screen.</p>
+      <p class="empty-sub">Or take one now — the machine's summary and your game in the same shot.</p>
+    </div>
+    <label class="btn btn-primary btn-block">
+      Take a photo
+      <input id="camera" type="file" accept="image/*" capture="environment" hidden>
+    </label>
+    <label class="btn btn-secondary btn-block">
+      Choose from photos
+      <input id="picker" type="file" accept="image/*" hidden>
+    </label>
+    <p id="recent-note" class="note"></p>
+  </section>
+
+  <!-- Working -->
+  <section id="view-busy" class="view" hidden>
+    <div class="riser" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+    <p id="busy-label" class="busy-label">Reading your results screen…</p>
+  </section>
+
+  <!-- Confirm -->
+  <section id="view-confirm" class="view" hidden>
+    <header class="proof">
+      <img id="proof-img" alt="The results screen you shared" />
+      <div class="proof-meta">
+        <p id="proof-date" class="proof-date"></p>
+        <p id="proof-machine" class="proof-machine"></p>
+      </div>
+    </header>
+
+    <div id="extraction-note" class="banner banner-warn" hidden>
+      Couldn't read this screen. Fill the numbers in yourself below.
+    </div>
+
+    <section class="readout">
+      <div class="field field-hero">
+        <p class="field-label">Steps</p>
+        <p id="f-steps" class="field-value hero-value">—</p>
+        <button class="edit" data-edit="steps" aria-label="Edit steps">Edit</button>
+      </div>
+
+      <div class="field field-derived">
+        <p class="field-label">Floors</p>
+        <p id="f-floors" class="field-value">—</p>
+        <button class="edit" data-edit="floors" aria-label="Edit floors">Edit</button>
+        <p id="f-sanity" class="field-note"></p>
+      </div>
+    </section>
+
+    <div class="field">
+      <p class="field-label">Time</p>
+      <p id="f-duration" class="field-value">—</p>
+      <button class="edit" data-edit="duration" aria-label="Edit time">Edit</button>
+    </div>
+
+    <div class="field">
+      <p class="field-label">Game</p>
+      <p id="f-game" class="field-value field-value-text">—</p>
+      <button class="edit" data-edit="game" aria-label="Edit game">Edit</button>
+      <p id="f-game-note" class="field-note"></p>
+    </div>
+
+    <label class="check">
+      <input id="health" type="checkbox">
+      <span>Log this workout in Google Health</span>
+    </label>
+    <p id="health-note" class="field-note note-warn" hidden></p>
+
+    <button id="save" class="btn btn-primary btn-block">Save workout</button>
+    <button id="discard" class="btn btn-quiet btn-block">Discard</button>
+    <p id="save-error" class="banner banner-warn" hidden></p>
+  </section>
+
+  <!-- Saved -->
+  <section id="view-done" class="view" hidden>
+    <p class="done-mark" aria-hidden="true">▲</p>
+    <p id="done-head" class="done-head"></p>
+    <p id="done-sub" class="done-sub"></p>
+    <button id="again" class="btn btn-primary btn-block">Log another</button>
+  </section>
+</main>
+
+<!-- Edit dialog -->
+<dialog id="editor">
+  <form method="dialog" class="editor-form">
+    <h2 id="editor-title" class="editor-title"></h2>
+    <input id="editor-input" class="editor-input" autocomplete="off">
+    <p id="editor-hint" class="editor-hint"></p>
+    <div id="editor-list" class="editor-list"></div>
+    <p id="editor-warn" class="field-note note-warn" hidden></p>
+    <menu class="editor-actions">
+      <button value="cancel" class="btn btn-quiet">Cancel</button>
+      <button id="editor-ok" value="ok" class="btn btn-primary">Done</button>
+    </menu>
+  </form>
+</dialog>
+
+<script src="https://accounts.google.com/gsi/client" async></script>
+<script type="module" src="/app.js"></script>
+</body>
+</html>
