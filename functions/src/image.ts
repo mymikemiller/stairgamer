@@ -1,6 +1,5 @@
 import heicConvert from "heic-convert";
 import sharp from "sharp";
-import exifReader from "exif-reader";
 
 export interface InputImage {
   mediaType: string;
