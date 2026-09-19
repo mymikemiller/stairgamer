@@ -1,7 +1,8 @@
 import { getFirestore, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import type { KnownGame } from "./games";
-import type { CommitDeps, WorkoutDoc } from "./commit";
+import type { CommitDeps, WorkoutDoc, ExistingClimb } from "./commit";
+import { isSameClimb } from "./duplicate";
 import type { InputImage } from "./image";
 
 const HINT_LIMIT = 12;
@@ -60,7 +61,38 @@ export async function clearHealthRefreshToken(uid: string): Promise<void> {
   await healthDoc(uid).delete().catch(() => {});
 }
 
+export async function deleteImage(path: string): Promise<void> {
+  await bucket().file(path).delete().catch(() => {}); // already gone is fine
+}
+
+// Candidate matches for a re-uploaded workout. Queried on steps (a single
+// field Firestore indexes automatically), then narrowed by capture time in
+// isSameClimb — see duplicate.ts for why time is a window, not a date.
+export async function findSameClimb(
+  uid: string, key: { steps: number; climbedAt: Date },
+): Promise<ExistingClimb | null> {
+  const snap = await userDoc(uid).collection("workouts")
+    .where("steps", "==", key.steps).limit(10).get();
+
+  for (const doc of snap.docs) {
+    const climbedAt = (doc.get("climbedAt") as Timestamp).toDate();
+    if (!isSameClimb({ steps: doc.get("steps") as number, climbedAt }, key)) continue;
+    return {
+      id: doc.id,
+      imagePath: (doc.get("imagePath") ?? "") as string,
+      steps: doc.get("steps") as number,
+      durationSec: doc.get("durationSec") as number,
+      climbedAt,
+      gameId: (doc.get("gameId") ?? null) as string | null,
+      health: (doc.get("health") ?? { logged: false }) as any,
+    };
+  }
+  return null;
+}
+
 export const storeDeps: Omit<CommitDeps, "logToHealth"> = {
+  deleteImage,
+  findSameClimb,
   listGames,
   savePrefs,
 
@@ -100,11 +132,41 @@ export const storeDeps: Omit<CommitDeps, "logToHealth"> = {
       .set({ workoutCount: FieldValue.increment(-1) }, { merge: true });
   },
 
-  async moveDraftImage(uid, draftId) {
-    const target = workoutPath(uid, draftId);
+  async moveDraftImage(uid, draftId, targetId) {
+    const target = workoutPath(uid, targetId);
     const draft = bucket().file(draftPath(uid, draftId));
     // Idempotent: a retried commit finds the draft already moved.
     if ((await draft.exists())[0]) await draft.move(target);
     return target;
   },
 };
+
+// --- Google Health retry -------------------------------------------------
+
+export async function getStoredWorkout(uid: string, workoutId: string) {
+  const snap = await userDoc(uid).collection("workouts").doc(workoutId).get();
+  if (!snap.exists) return null;
+  return {
+    climbedAt: (snap.get("climbedAt") as Timestamp).toDate(),
+    steps: snap.get("steps") as number,
+    durationSec: snap.get("durationSec") as number,
+    health: (snap.get("health") ?? { logged: false }) as any,
+  };
+}
+
+export async function saveWorkoutHealth(uid: string, workoutId: string, health: any) {
+  await userDoc(uid).collection("workouts").doc(workoutId).set({ health }, { merge: true });
+}
+
+// Workouts the user asked to log and which still have not reached Health.
+// Queried on health.pending, a single field Firestore indexes automatically.
+export async function listPendingHealth(uid: string, limitTo = 20) {
+  const snap = await userDoc(uid).collection("workouts")
+    .where("health.pending", "==", true).limit(limitTo).get();
+  return snap.docs.map((d) => ({
+    id: d.id,
+    steps: d.get("steps") as number,
+    climbedAt: (d.get("climbedAt") as Timestamp).toDate().toISOString(),
+    error: (d.get("health")?.error ?? "") as string,
+  }));
+}

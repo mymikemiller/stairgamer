@@ -11,9 +11,11 @@ import { normalizeImage, readCaptureInstant, resolveCapturedAt } from "./image";
 import { extractWorkout } from "./extract";
 import { parseUpload } from "./parse";
 import { commitWorkout, type CommitDeps } from "./commit";
+import { retryHealth } from "./retryHealth";
 import {
   storeDeps, listGames, saveDraftImage, getPrefs,
   getHealthRefreshToken, saveHealthRefreshToken, clearHealthRefreshToken,
+  getStoredWorkout, saveWorkoutHealth, listPendingHealth,
 } from "./store";
 import {
   checkHealthGrant, exchangeCode, refreshAccessToken, logWorkout, HEALTH_SCOPE,
@@ -29,6 +31,13 @@ const oauthConfig = () => ({
   clientId: GOOGLE_OAUTH_CLIENT_ID.value(),
   clientSecret: GOOGLE_OAUTH_CLIENT_SECRET.value(),
 });
+
+async function writeToHealth(uid: string, facts: any) {
+  const refreshToken = await getHealthRefreshToken(uid);
+  if (!refreshToken) throw new Error("Google Health is not connected");
+  const accessToken = await refreshAccessToken(refreshToken, oauthConfig());
+  return logWorkout({ ...facts, accessToken });
+}
 
 function fail(res: any, err: unknown) {
   if (err instanceof Unauthorized) return res.status(401).json({ error: err.message });
@@ -91,19 +100,12 @@ export const commit = onRequest(
         return void res.status(400).json({ error: "draftId, steps, durationSec, climbedAt required" });
       }
 
-      const deps: CommitDeps = {
-        ...storeDeps,
-        async logToHealth(u, facts) {
-          const refreshToken = await getHealthRefreshToken(u);
-          if (!refreshToken) throw new Error("Google Health is not connected");
-          const accessToken = await refreshAccessToken(refreshToken, oauthConfig());
-          return logWorkout({ ...facts, accessToken });
-        },
-      };
+      const deps: CommitDeps = { ...storeDeps, logToHealth: writeToHealth };
 
       res.json(await commitWorkout(deps, {
         uid,
         draftId: String(body.draftId),
+        replaceWorkoutId: body.replaceWorkoutId ? String(body.replaceWorkoutId) : undefined,
         steps,
         durationSec,
         gameName: body.gameName ?? null,
@@ -128,6 +130,21 @@ export const health = onRequest(
       if (route === "scope") return void res.json({ scope: HEALTH_SCOPE });
 
       const uid = await requireUid(req.headers.authorization);
+
+      if (route === "pending") {
+        return void res.json({ workouts: await listPendingHealth(uid) });
+      }
+
+      if (route === "retry") {
+        const workoutId = String((req.body ?? {}).workoutId ?? "");
+        if (!workoutId) return void res.status(400).json({ error: "workoutId required" });
+        const health = await retryHealth({
+          getWorkout: getStoredWorkout,
+          saveHealth: saveWorkoutHealth,
+          logToHealth: writeToHealth,
+        }, uid, workoutId);
+        return void res.json({ health });
+      }
 
       if (route === "connect") {
         const { code, redirectUri } = req.body ?? {};

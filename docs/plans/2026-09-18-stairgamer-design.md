@@ -344,6 +344,39 @@ Additionally an **opt-in integration test** runs the real vision API against the
 four photos — mocks cannot catch a prompt regression, which is the most likely
 way this app silently degrades.
 
+## 9a. Re-photographing a workout
+
+A second photo of a workout already logged is usually a *better shot of the same
+results screen*, not a new workout. Committing it blind produces two rows for one
+climb and inflates the game's play count — which is exactly what happened on the
+first live run.
+
+**Matching** is by step count plus a ±12h window on capture time
+(`duplicate.ts`). Matching on the exact EXIF timestamp would only catch the very
+same file shared twice, because a second photo is taken minutes later and
+carries a later timestamp. Matching on calendar date would split a late-evening
+workout from a photo taken twenty minutes after midnight, and would depend on
+whose timezone did the splitting.
+
+**On a match** the commit does not write. It returns a `duplicate` report, the
+client shows both photos side by side, and only a second call carrying
+`replaceWorkoutId` proceeds.
+
+**A replacement** reuses the existing workout id, so one climb stays one row; it
+deletes the old image, does not increment `workoutCount`, and — critically —
+**does not write to Google Health again** when the original already logged. The
+step count is what matched, so the existing entry is still correct, and a second
+write would duplicate the session in the user's health timeline with no way for
+this app to undo it.
+
+## 9b. Retrying a failed Health write
+
+`health.pending` is set only when the user asked for Health and the write
+failed. `logged: false` alone is ambiguous — it also means "never asked" — and
+retrying those would push workouts into the timeline the user deliberately left
+out. Pending workouts are offered for retry on the home screen and immediately
+after a failed save.
+
 ## 10. Deliberately out of scope
 
 Visualisations and timelapse (the schema supports them; no UI now), game rename

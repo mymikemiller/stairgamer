@@ -23,6 +23,8 @@ const input = (over: Partial<CommitInput> = {}): CommitInput => ({
 
 const deps = (over: Partial<CommitDeps> = {}): CommitDeps => ({
   listGames: vi.fn(async () => []),
+  findSameClimb: vi.fn(async () => null),
+  deleteImage: vi.fn(async () => {}),
   getExistingWorkout: vi.fn(async () => null),
   saveWorkout: vi.fn(async () => {}),
   upsertGame: vi.fn(async () => {}),
@@ -67,7 +69,10 @@ describe("commitWorkout", () => {
 
     expect(d.saveWorkout).toHaveBeenCalled();
     const doc = (d.saveWorkout as any).mock.calls[0][2];
-    expect(doc.health).toEqual({ logged: false, error: expect.stringMatching(/403/) });
+    // `pending` is what separates "tried and failed" from "never asked", so a
+    // retry can find exactly the workouts that still want logging.
+    expect(doc.health).toEqual({
+      logged: false, pending: true, error: expect.stringMatching(/403/) });
     expect(out.health.logged).toBe(false);
   });
 
@@ -82,6 +87,7 @@ describe("commitWorkout", () => {
     const d = deps();
     await commitWorkout(d, input({ logToHealth: false }));
     expect(d.logToHealth).not.toHaveBeenCalled();
+    // No `pending`: the user never asked for this one, so a retry must skip it.
     expect((d.saveWorkout as any).mock.calls[0][2].health).toEqual({ logged: false });
   });
 
@@ -140,7 +146,72 @@ describe("commitWorkout", () => {
   it("moves the image out of the drafts prefix", async () => {
     const d = deps();
     await commitWorkout(d, input());
-    expect(d.moveDraftImage).toHaveBeenCalledWith("u1", "d1");
+    expect(d.moveDraftImage).toHaveBeenCalledWith("u1", "d1", "d1");
     expect((d.saveWorkout as any).mock.calls[0][2].imagePath).toBe("workouts/u1/d1.jpg");
+  });
+});
+
+describe("re-uploading a workout already recorded", () => {
+  const existing = {
+    id: "w-old",
+    imagePath: "workouts/u1/w-old.jpg",
+    steps: 2135,
+    durationSec: 2100,
+    climbedAt: new Date("2023-11-15T19:00:00.000Z"),
+    gameId: "immortals-fenyx-rising",
+    health: { logged: true, dataPointId: "dp/1" },
+  };
+
+  it("asks before writing, instead of silently creating a second row", async () => {
+    const d = deps({ findSameClimb: vi.fn(async () => existing) });
+    const out = await commitWorkout(d, input());
+
+    expect(out.duplicate).toMatchObject({ existingId: "w-old", imagePath: "workouts/u1/w-old.jpg" });
+    expect(d.saveWorkout).not.toHaveBeenCalled();
+    expect(d.upsertGame).not.toHaveBeenCalled();
+    expect(d.moveDraftImage).not.toHaveBeenCalled();
+  });
+
+  it("commits normally when nothing matches", async () => {
+    const d = deps();
+    const out = await commitWorkout(d, input());
+    expect(out.duplicate).toBeUndefined();
+    expect(d.saveWorkout).toHaveBeenCalled();
+  });
+
+  it("replaces the stored image when the user confirms", async () => {
+    const d = deps({ findSameClimb: vi.fn(async () => existing) });
+    await commitWorkout(d, input({ replaceWorkoutId: "w-old" }));
+
+    expect(d.deleteImage).toHaveBeenCalledWith("workouts/u1/w-old.jpg");
+    // The new image takes the EXISTING workout's id, so there is still one row.
+    expect(d.moveDraftImage).toHaveBeenCalledWith("u1", "d1", "w-old");
+    expect((d.saveWorkout as any).mock.calls[0][1]).toBe("w-old");
+  });
+
+  it("does not inflate the play count on a replacement", async () => {
+    const d = deps({ findSameClimb: vi.fn(async () => existing) });
+    await commitWorkout(d, input({ replaceWorkoutId: "w-old" }));
+    expect((d.upsertGame as any).mock.calls[0][2].countsAsNewPlay).toBe(false);
+  });
+
+  it("keeps the existing Google Health result rather than logging again", async () => {
+    // Re-logging would put a second copy of the same session in the user's
+    // health timeline, and this app cannot delete it.
+    const d = deps({ findSameClimb: vi.fn(async () => existing) });
+    await commitWorkout(d, input({ replaceWorkoutId: "w-old", logToHealth: true }));
+
+    expect(d.logToHealth).not.toHaveBeenCalled();
+    expect((d.saveWorkout as any).mock.calls[0][2].health)
+      .toEqual({ logged: true, dataPointId: "dp/1" });
+  });
+
+  it("still logs to Health on replacement if the original never made it", async () => {
+    const d = deps({ findSameClimb: vi.fn(async () => ({
+      ...existing, health: { logged: false, pending: true, error: "was broken" } })) });
+    await commitWorkout(d, input({ replaceWorkoutId: "w-old", logToHealth: true }));
+
+    expect(d.logToHealth).toHaveBeenCalled();
+    expect((d.saveWorkout as any).mock.calls[0][2].health.logged).toBe(true);
   });
 });

@@ -41,6 +41,11 @@
       <input id="picker" type="file" accept="image/*" hidden>
     </label>
     <p id="recent-note" class="note"></p>
+
+    <div id="pending-health" class="banner banner-warn" hidden>
+      <p id="pending-text" class="pending-text"></p>
+      <button id="pending-retry" class="btn btn-secondary btn-block">Send them now</button>
+    </div>
   </section>
 
   <!-- Working -->
@@ -102,11 +107,37 @@
     <p id="save-error" class="banner banner-warn" hidden></p>
   </section>
 
+  <!-- Same climb already stored -->
+  <section id="view-duplicate" class="view" hidden>
+    <h2 class="dup-head">You've already logged this climb</h2>
+    <p id="dup-sub" class="dup-sub"></p>
+
+    <div class="dup-pair">
+      <figure class="dup-shot">
+        <img id="dup-old" alt="The photo already stored for this workout">
+        <figcaption>Stored</figcaption>
+      </figure>
+      <figure class="dup-shot">
+        <img id="dup-new" alt="The photo you just shared">
+        <figcaption>New</figcaption>
+      </figure>
+    </div>
+
+    <p class="dup-note">Replacing swaps the photo and updates the figures. It
+    won't add a second workout, and it won't log to Google Health twice.</p>
+
+    <button id="dup-replace" class="btn btn-primary btn-block">Use the new photo</button>
+    <button id="dup-keep" class="btn btn-secondary btn-block">Keep the stored one</button>
+  </section>
+
   <!-- Saved -->
   <section id="view-done" class="view" hidden>
     <p class="done-mark" aria-hidden="true">▲</p>
     <p id="done-head" class="done-head"></p>
     <p id="done-sub" class="done-sub"></p>
+    <button id="done-retry" class="btn btn-secondary btn-block" hidden>
+      Try Google Health again
+    </button>
     <button id="again" class="btn btn-primary btn-block">Log another</button>
   </section>
 </main>

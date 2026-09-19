@@ -211,3 +211,25 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
 }
 .editor-list button[aria-current="true"] { border-color: var(--amber); }
 .editor-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin: 0.3rem 0 0; padding: 0; }
+
+/* Unsent-to-Health notice on the home screen. */
+#pending-health { text-align: left; }
+.pending-text { margin: 0 0 0.7rem; }
+#pending-health .btn { color: var(--ink); border-color: var(--coral); }
+
+/* Side-by-side comparison when the same climb is re-photographed. The two
+   shots are the decision, so they get the space and everything else is quiet. */
+.dup-head { font-size: 1.35rem; margin: 0; font-weight: 700; }
+.dup-sub { margin: 0; color: var(--ink-mute); }
+.dup-pair { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.dup-shot { margin: 0; }
+.dup-shot img {
+  width: 100%; aspect-ratio: 3 / 4; object-fit: cover;
+  border-radius: 10px; background: var(--surface); display: block;
+}
+.dup-shot figcaption {
+  margin-top: 0.4rem; text-align: center;
+  font-size: 0.85rem; font-weight: 600; color: var(--ink-mute);
+}
+.dup-shot:last-child figcaption { color: var(--amber); }
+.dup-note { margin: 0; font-size: 0.88rem; color: var(--ink-mute); }
