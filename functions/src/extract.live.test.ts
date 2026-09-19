@@ -17,10 +17,13 @@ const image = (name: string) => ({
   base64: readFileSync(join(PHOTOS, name)).toString("base64"),
 });
 
-const MATRIX_TOTK = "AB5A02B5-6670-44B6-A01A-866C995A2073.jpeg";
-const MATRIX_IMMORTALS = "DBB92472-AA12-4155-8AA3-00B60B3F5BE7.jpeg";
-const MATRIX_PROJECTOR = "81110663-CFA5-48E5-8FD9-ED31D1C9D298.jpeg";
-const STAIRMASTER = "A9369EEE-65D8-4184-BFC5-1E2D8505074E.jpeg";
+// Named by how the game is displayed, which is a stable property of each
+// photo. Naming these after the game itself invites exactly the mix-up this
+// file exists to catch.
+const ON_PROJECTOR = "81110663-CFA5-48E5-8FD9-ED31D1C9D298.jpeg";
+const ON_HANDHELD = "AB5A02B5-6670-44B6-A01A-866C995A2073.jpeg";
+const ON_TV = "DBB92472-AA12-4155-8AA3-00B60B3F5BE7.jpeg";
+const NO_GAME = "A9369EEE-65D8-4184-BFC5-1E2D8505074E.jpeg";
 
 const TOTK = "The Legend of Zelda: Tears of the Kingdom";
 const IMMORTALS = "Immortals: Fenyx Rising";
@@ -31,10 +34,10 @@ beforeAll(() => { client = new Anthropic(); });
 describe("metrics", () => {
   // Ground truth read by hand off each screen.
   it.each([
-    [MATRIX_TOTK, 3831, 239, 4092],
-    [MATRIX_IMMORTALS, 2700, 168, 2700],
-    [MATRIX_PROJECTOR, 2135, 133, 2100],
-    [STAIRMASTER, 2043, 127, 1651],
+    [ON_HANDHELD, 3831, 239, 4092],
+    [ON_TV, 2700, 168, 2700],
+    [ON_PROJECTOR, 2135, 133, 2100],
+    [NO_GAME, 2043, 127, 1651],
   ])("reads %s as %i steps / %i floors / %is", async (file, steps, floors, secs) => {
     const out = await extractWorkout(client, image(file), []);
     expect(out.stepsRaw).toBe(steps);
@@ -44,7 +47,7 @@ describe("metrics", () => {
 
   it("takes the Total column, never the Workout column", async () => {
     // The Workout column here reads 2015; Total is 2135.
-    const out = await extractWorkout(client, image(MATRIX_PROJECTOR), []);
+    const out = await extractWorkout(client, image(ON_PROJECTOR), []);
     expect(out.stepsRaw).not.toBe(2015);
     expect(out.hadCooldownColumn).toBe(true);
   }, 120_000);
@@ -60,9 +63,9 @@ describe("game detection with a history hint", () => {
   // during design, with no history, the projector photo was read as Zelda and
   // both TOTK photos as Breath of the Wild.
   it.each([
-    [MATRIX_PROJECTOR, IMMORTALS],
-    [MATRIX_TOTK, TOTK],
-    [MATRIX_IMMORTALS, IMMORTALS],
+    [ON_PROJECTOR, IMMORTALS],
+    [ON_HANDHELD, TOTK],
+    [ON_TV, TOTK],
   ])("identifies %s as %s", async (file, expected) => {
     const out = await extractWorkout(client, image(file), history);
     expect(out.game).toBe(expected); // verbatim, so it snaps without fuzzy matching
@@ -70,7 +73,7 @@ describe("game detection with a history hint", () => {
 
   it("still returns null when the screen shows no game", async () => {
     // The StairMaster photo shows the machine's own scenery video.
-    const out = await extractWorkout(client, image(STAIRMASTER), history);
+    const out = await extractWorkout(client, image(NO_GAME), history);
     expect(out.game).toBeNull();
     expect(out.gameConfidence).toBe("none");
   }, 120_000);
@@ -79,7 +82,7 @@ describe("game detection with a history hint", () => {
 describe("game detection with no history", () => {
   it("does not invent a game for the scenery-video screen", async () => {
     // Without candidates the model must still decline rather than guess.
-    const out = await extractWorkout(client, image(STAIRMASTER), []);
+    const out = await extractWorkout(client, image(NO_GAME), []);
     expect(out.game).toBeNull();
   }, 120_000);
 });
