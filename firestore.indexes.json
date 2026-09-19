@@ -1,15 +1,4 @@
 {
-  "indexes": [
-    {
-      "collectionGroup": "games",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "lastPlayedAt", "order": "DESCENDING" }]
-    },
-    {
-      "collectionGroup": "workouts",
-      "queryScope": "COLLECTION",
-      "fields": [{ "fieldPath": "climbedAt", "order": "DESCENDING" }]
-    }
-  ],
+  "indexes": [],
   "fieldOverrides": []
 }

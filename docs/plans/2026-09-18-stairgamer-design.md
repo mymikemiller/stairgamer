@@ -302,6 +302,11 @@ detection is improving.
 
 Floors appear nowhere in storage.
 
+No composite indexes are declared. Both queries the app makes — games ordered by
+`lastPlayedAt`, workouts ordered by `climbedAt` — sort on a single field, and
+Firestore maintains single-field indexes automatically. Declaring them
+explicitly is rejected with *"this index is not necessary"*.
+
 ## 8. Failure handling
 
 | Failure | Behaviour |
