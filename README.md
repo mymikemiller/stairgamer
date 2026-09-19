@@ -83,8 +83,33 @@ Manager require it).
 npm i -g firebase-tools && firebase login
 ```
 
-Put your project id in `.firebaserc`, then enable in the console:
-Authentication → **Google** sign-in, Firestore, and Cloud Storage.
+Put your project id in `.firebaserc`, then provision three things in the
+**Firebase** console (`console.firebase.google.com/project/<id>`) — *not* the
+Cloud console's API Library. Each "Get started" flow enables the right API and
+creates the resource, which enabling an API by hand does not:
+
+| Product | Where | Note |
+| --- | --- | --- |
+| Google sign-in | Authentication → Sign-in method → **Google** → Enable | a provider toggle, not an API |
+| Firestore | Firestore Database → Create database | **location is permanent** |
+| Cloud Storage | Storage → Get started | creates the default bucket |
+
+> Don't hunt for these in the Cloud console API Library. "Google sign-in" isn't
+> listed there at all, and of the several storage entries the relevant one is
+> **Cloud Storage for Firebase** (`firebasestorage.googleapis.com`) — the plain
+> `storage.googleapis.com` / `storage-component` / `storage-api` entries are
+> base GCS and are already on by default. Enabling it there still wouldn't
+> create the bucket.
+
+Check what actually exists rather than trusting the API list:
+
+```bash
+gcloud firestore databases list --project <id>
+gcloud storage buckets list --project <id>
+```
+
+Empty output means the product is not provisioned, however many APIs are
+enabled.
 
 **2. Web config** — copy your web app's config into `public/firebase-config.js`
 (these values aren't secrets; `firestore.rules` and `storage.rules` govern
