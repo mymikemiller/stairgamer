@@ -27,7 +27,7 @@ const deps = (over: Partial<CommitDeps> = {}): CommitDeps => ({
   saveWorkout: vi.fn(async () => {}),
   upsertGame: vi.fn(async () => {}),
   releaseGame: vi.fn(async () => {}),
-  moveDraftImage: vi.fn(async () => "users/u1/workouts/d1.jpg"),
+  moveDraftImage: vi.fn(async () => "workouts/u1/d1.jpg"),
   savePrefs: vi.fn(async () => {}),
   logToHealth: vi.fn(async () => ({ dataPointId: "dp/1" })),
   ...over,
@@ -141,6 +141,6 @@ describe("commitWorkout", () => {
     const d = deps();
     await commitWorkout(d, input());
     expect(d.moveDraftImage).toHaveBeenCalledWith("u1", "d1");
-    expect((d.saveWorkout as any).mock.calls[0][2].imagePath).toBe("users/u1/workouts/d1.jpg");
+    expect((d.saveWorkout as any).mock.calls[0][2].imagePath).toBe("workouts/u1/d1.jpg");
   });
 });

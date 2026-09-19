@@ -126,18 +126,31 @@ firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_ID
 firebase functions:secrets:set GOOGLE_OAUTH_CLIENT_SECRET
 ```
 
-**5. Storage lifecycle** — drafts are uploaded before you confirm, so abandoned
-ones need sweeping up:
+**5. Storage lifecycle** — the photo is uploaded when you share it, before you
+confirm, so abandoned submissions need sweeping up. Drafts live under their own
+top-level `drafts/` prefix precisely so this rule cannot touch committed
+workouts (a GCS lifecycle prefix is literal — `users/*/drafts/` is not
+expressible).
 
 ```bash
-gsutil lifecycle set - gs://<your-bucket> <<'JSON'
-{"rule":[{"action":{"type":"Delete"},
-  "condition":{"age":1,"matchesPrefix":["users/"],"matchesSuffix":[".jpg"]}}]}
+cat > /tmp/lifecycle.json <<'JSON'
+{"lifecycle":{"rule":[
+  {"action":{"type":"Delete"},
+   "condition":{"age":1,"matchesPrefix":["drafts/"]}}
+]}}
 JSON
+
+gcloud storage buckets update gs://stairgamer-us.firebasestorage.app \
+  --lifecycle-file=/tmp/lifecycle.json
+
+# confirm it took
+gcloud storage buckets describe gs://stairgamer-us.firebasestorage.app \
+  --format="value(lifecycle_config)"
 ```
 
-> Scope this to `drafts/` for your bucket layout — the prefix match above is
-> illustrative. Committed workouts live under `users/{uid}/workouts/`.
+Committed workouts live under `workouts/{uid}/` and are never matched by this
+rule. Minimum age is 1 day, so a draft survives at least 24h — ample, since the
+confirmation screen is filled in within seconds.
 
 **6. Deploy**
 

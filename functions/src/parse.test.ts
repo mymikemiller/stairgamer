@@ -14,7 +14,7 @@ const deps = (over: Partial<ParseDeps> = {}): ParseDeps => ({
   normalize: vi.fn(async () => ({ image: upload, exif: undefined })),
   captureInstant: vi.fn(() => ({ at: new Date("2023-11-15T19:00:00.000Z"), uncertain: false })),
   listGames: vi.fn(async () => [{ id: "immortals-fenyx-rising", name: "Immortals: Fenyx Rising" }]),
-  saveDraftImage: vi.fn(async () => "users/u1/drafts/d1.jpg"),
+  saveDraftImage: vi.fn(async () => "drafts/u1/d1.jpg"),
   extract: vi.fn(async () => vision),
   newDraftId: () => "d1",
   ...over,

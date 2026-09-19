@@ -9,8 +9,12 @@ const HINT_LIMIT = 12;
 const userDoc = (uid: string) => getFirestore().collection("users").doc(uid);
 const bucket = () => getStorage().bucket();
 
-const draftPath = (uid: string, draftId: string) => `users/${uid}/drafts/${draftId}.jpg`;
-const workoutPath = (uid: string, id: string) => `users/${uid}/workouts/${id}.jpg`;
+// Drafts live under their own top-level prefix, NOT users/{uid}/drafts/.
+// A GCS lifecycle rule matches a literal prefix with no wildcards, so
+// "users/*/drafts/" cannot be expressed — a rule broad enough to catch every
+// user's drafts would also match their committed workouts and delete them.
+const draftPath = (uid: string, draftId: string) => `drafts/${uid}/${draftId}.jpg`;
+const workoutPath = (uid: string, id: string) => `workouts/${uid}/${id}.jpg`;
 
 // Most-recently-played first: the order matters, because the vision prompt
 // presents these as ranked candidates.

@@ -11,4 +11,4 @@ export const firebaseConfig = {
 
 // Google Cloud OAuth *web* client id, used only for the incremental Google
 // Health consent. Its authorised origin must include this app's URL.
-export const googleOAuthClientId = "REPLACE_ME.apps.googleusercontent.com";
+export const googleOAuthClientId = "667129097330-afn6r7h63obsf06rn6r6qcpd80m1enfn.apps.googleusercontent.com";
