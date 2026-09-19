@@ -93,11 +93,27 @@ access).
 **3. Google Health API** — in the Google Cloud console for the same project:
 
 - Enable the **Google Health API**.
-- OAuth consent screen → add the scope
-  `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly`.
-- Credentials → create an **OAuth web client**, add your hosting URL as an
-  authorised JavaScript origin, and put its id in `public/firebase-config.js`
-  as `googleOAuthClientId`.
+- **Google Auth Platform → Data Access** (`console.cloud.google.com/auth/scopes`)
+  → *Add or remove scopes*. The filter table won't list it, so use **Manually
+  add scopes** at the bottom of the panel and paste:
+  `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.writeonly`
+  → *Add to table* → *Update* → *Save*.
+
+  > Not under "APIs & Services → OAuth consent screen" any more; Google moved
+  > consent-screen settings to Google Auth Platform (Branding / Audience /
+  > Data Access / Clients) in 2025. Configure Branding and Audience first if
+  > Data Access is not reachable yet.
+
+- **Google Auth Platform → Audience → Publish app.** ⚠️ Leave this in
+  *Testing* and Google issues refresh tokens that **expire after 7 days**.
+  This app stores a refresh token and relies on it indefinitely, so in Testing
+  your Health logging dies weekly: the confirmation screen shows "access has
+  expired or been revoked" every few days and you re-consent forever. Published
+  but unverified is the right state here.
+
+- **Google Auth Platform → Clients** → create an **OAuth client ID** of type
+  *Web application*, add your hosting URL as an authorised JavaScript origin,
+  and put its id in `public/firebase-config.js` as `googleOAuthClientId`.
 
 An unverified OAuth client is capped at **100 users**, which needs no security
 review. Beyond that Google requires a third-party security review.
