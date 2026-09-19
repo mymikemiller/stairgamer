@@ -166,8 +166,19 @@ access).
   > The client has to exist *after* hosting is deployed, or you won't know the
   > URL to register. If you created it earlier, go back and add the origins.
 
-An unverified OAuth client is capped at **100 users**, which needs no security
-review. Beyond that Google requires a third-party security review.
+**Do not submit the app for verification.** The console will prompt for it;
+ignore that. Published-but-unverified is the right state for a personal app:
+
+- The **7-day refresh token expiry is tied to *Testing* publishing status, not
+  to verification** — Google's docs are explicit that a consent screen with "a
+  publishing status of 'Testing' is issued a refresh token expiring in 7 days".
+  Publishing fixes it; verification adds nothing.
+- Unverified clients are capped at **100 users**, far beyond what this needs.
+  Going past that requires a third-party CASA security assessment, which costs
+  thousands per year.
+- The only cost is that each person sees a "Google hasn't verified this app"
+  screen the first time they connect Health, and clicks *Advanced → Go to
+  StairGamer*. Once each.
 
 **4. Secrets**
 
