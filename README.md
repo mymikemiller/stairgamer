@@ -91,8 +91,18 @@ creates the resource, which enabling an API by hand does not:
 | Product | Where | Note |
 | --- | --- | --- |
 | Google sign-in | Authentication → Sign-in method → **Google** → Enable | a provider toggle, not an API |
-| Firestore | Firestore Database → Create database | **location is permanent** |
-| Cloud Storage | Storage → Get started | creates the default bucket |
+| Firestore | Firestore Database → Create database | ID **`(default)`**, location `us-central1` — both permanent |
+| Cloud Storage | Storage → Get started | same region; creates the default bucket |
+
+Firestore's **database ID must be `(default)`**. Server and client both call
+`getFirestore()` with no database argument, so a named database deploys cleanly
+and then fails every read and write at runtime.
+
+Use a **single region** (`us-central1`), not the `nam5` multi-region the console
+preselects: Cloud Functions here declare no region, so firebase-functions v2
+places them in `us-central1`, and co-locating avoids a cross-region hop on every
+request. Region and database ID are both permanent. Choose *Production mode*
+for rules — `firestore.rules` is deployed from this repo.
 
 > Don't hunt for these in the Cloud console API Library. "Google sign-in" isn't
 > listed there at all, and of the several storage entries the relevant one is
