@@ -41,6 +41,13 @@
       <input id="picker" type="file" accept="image/*" hidden>
     </label>
     <p id="recent-note" class="note"></p>
+    <p id="timelapse-game-note" class="note" hidden></p>
+
+    <div id="timelapse-actions" class="tl-actions" hidden>
+      <button id="tl-view" class="btn btn-secondary">View timelapse</button>
+      <button id="tl-save" class="btn btn-secondary">Save timelapse</button>
+      <button id="tl-pick" class="linkish">Select game for timelapse</button>
+    </div>
 
     <div id="pending-health" class="banner banner-warn" hidden>
       <p id="pending-text" class="pending-text"></p>
@@ -141,6 +148,35 @@
     <button id="again" class="btn btn-primary btn-block">Log another</button>
   </section>
 </main>
+
+<!-- Fullscreen timelapse player -->
+<div id="player" class="player" hidden>
+  <canvas id="player-canvas" class="player-canvas"></canvas>
+  <div id="player-chrome" class="player-chrome">
+    <div class="player-top">
+      <p id="player-title" class="player-title"></p>
+      <button id="player-close" class="player-btn" aria-label="Close timelapse">Close</button>
+    </div>
+    <div class="player-bottom">
+      <button id="player-play" class="player-btn" aria-label="Pause">Pause</button>
+      <div class="player-track"><div id="player-bar" class="player-bar"></div></div>
+      <p id="player-count" class="player-count"></p>
+    </div>
+  </div>
+  <div id="player-status" class="player-status" hidden></div>
+</div>
+
+<!-- Game picker for the timelapse -->
+<dialog id="game-picker">
+  <form method="dialog" class="editor-form">
+    <h2 class="editor-title">Timelapse game</h2>
+    <p class="editor-hint">Most recently played first.</p>
+    <div id="picker-list" class="editor-list"></div>
+    <menu class="editor-actions">
+      <button value="cancel" class="btn btn-quiet">Cancel</button>
+    </menu>
+  </form>
+</dialog>
 
 <!-- Edit dialog -->
 <dialog id="editor">

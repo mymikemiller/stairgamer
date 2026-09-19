@@ -3,7 +3,7 @@ import {
   getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
-  getFirestore, collection, query, orderBy, limit, getDocs,
+  getFirestore, collection, query, orderBy, limit, getDocs, where,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import {
   getStorage, ref as storageRef, getDownloadURL,
@@ -12,6 +12,11 @@ import {
 import { firebaseConfig, googleOAuthClientId } from "/firebase-config.js";
 import { takeSharedImage } from "/share.js";
 import { createConfirmScreen } from "/confirm.js";
+import { putFrame } from "/frameCache.js";
+import {
+  drawFrame, loadFrameBlob, encodeTimelapse, isExportSupported,
+  timelapseFilename, CANVAS_W, CANVAS_H, FRAME_MS,
+} from "/timelapse.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -144,6 +149,7 @@ async function save() {
 
     const { steps, gameName } = confirmScreen.payload;
     lastWorkoutId = out.workoutId;
+    if (currentFile) putFrame(out.workoutId, currentFile);
     $("done-head").textContent = `${steps.toLocaleString()} steps logged.`;
     $("done-sub").textContent = out.health.logged
       ? `${gameName || "No game"} · also in Google Health`
@@ -162,6 +168,220 @@ async function save() {
 }
 
 
+
+
+// ---- timelapse -----------------------------------------------------------
+// The pin is stored only when it differs from the most recent game, so an
+// unpinned timelapse follows whatever game is being played now, and picking the
+// current top game is identical to clearing the pin.
+const PIN_KEY = "stairgamer.timelapseGameId";
+const readPin = () => { try { return localStorage.getItem(PIN_KEY); } catch { return null; } };
+const writePin = (id) => {
+  try { id ? localStorage.setItem(PIN_KEY, id) : localStorage.removeItem(PIN_KEY); } catch {}
+};
+
+let allGames = [];        // most recent first
+let timelapseGame = null;
+
+function applyTimelapseGame() {
+  const pinnedId = readPin();
+  const pinned = pinnedId ? allGames.find((g) => g.id === pinnedId) : null;
+  timelapseGame = pinned ?? allGames[0] ?? null;
+
+  const differs = timelapseGame && allGames[0] && timelapseGame.id !== allGames[0].id;
+  const note = $("timelapse-game-note");
+  note.hidden = !differs;
+  if (differs) note.textContent = `Timelapse game: ${timelapseGame.name}`;
+
+  $("timelapse-actions").hidden = !timelapseGame;
+}
+
+async function loadGamesForTimelapse(uid) {
+  const snap = await getDocs(query(
+    collection(db, "users", uid, "games"), orderBy("lastPlayedAt", "desc"), limit(100)));
+  allGames = snap.docs.map((d) => ({
+    id: d.id, name: d.get("name"), count: d.get("workoutCount") ?? 0 }));
+  applyTimelapseGame();
+}
+
+async function loadTimelapseWorkouts(gameId) {
+  const snap = await getDocs(query(
+    collection(db, "users", auth.currentUser.uid, "workouts"),
+    where("gameId", "==", gameId), orderBy("climbedAt", "asc")));
+  return snap.docs.map((d) => ({ id: d.id, imagePath: d.get("imagePath") }))
+    .filter((w) => w.imagePath);
+}
+
+const frameUrl = (path) => getDownloadURL(storageRef(storage, path));
+
+async function loadBitmaps(workouts, onProgress) {
+  const bitmaps = [];
+  for (const [i, workout] of workouts.entries()) {
+    try {
+      bitmaps.push(await createImageBitmap(await loadFrameBlob(workout, frameUrl)));
+    } catch {
+      // One unreadable frame should not lose the whole timelapse.
+    }
+    onProgress?.(i + 1, workouts.length);
+  }
+  return bitmaps;
+}
+
+$("tl-pick").addEventListener("click", () => {
+  const list = $("picker-list");
+  list.innerHTML = "";
+  for (const game of allGames) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = `${game.name} — ${game.count} workout${game.count === 1 ? "" : "s"}`;
+    button.setAttribute("aria-current", String(game.id === timelapseGame?.id));
+    button.addEventListener("click", () => {
+      // Choosing the current top game clears the pin rather than freezing it.
+      writePin(game.id === allGames[0]?.id ? null : game.id);
+      applyTimelapseGame();
+      $("game-picker").close();
+    });
+    list.appendChild(button);
+  }
+  $("game-picker").showModal();
+});
+
+// ---- player --------------------------------------------------------------
+const player = {
+  bitmaps: [], index: 0, timer: null, playing: false, hideTimer: null, ctx: null,
+};
+
+function paint() {
+  const bitmap = player.bitmaps[player.index];
+  if (!bitmap) return;
+  drawFrame(player.ctx, bitmap);
+  $("player-bar").style.width = `${((player.index + 1) / player.bitmaps.length) * 100}%`;
+  $("player-count").textContent = `${player.index + 1} / ${player.bitmaps.length}`;
+}
+
+function advance() {
+  player.index = (player.index + 1) % player.bitmaps.length;
+  paint();
+}
+
+function setPlaying(playing) {
+  player.playing = playing;
+  clearInterval(player.timer);
+  if (playing) player.timer = setInterval(advance, FRAME_MS);
+  $("player-play").textContent = playing ? "Pause" : "Play";
+  $("player-play").setAttribute("aria-label", playing ? "Pause" : "Play");
+}
+
+// Chrome hides itself after a moment and returns on a tap.
+function nudgeChrome() {
+  const chrome = $("player-chrome");
+  chrome.dataset.hidden = "false";
+  clearTimeout(player.hideTimer);
+  player.hideTimer = setTimeout(() => { chrome.dataset.hidden = "true"; }, 2500);
+}
+
+function closePlayer() {
+  setPlaying(false);
+  clearTimeout(player.hideTimer);
+  for (const bitmap of player.bitmaps) bitmap.close?.();
+  player.bitmaps = [];
+  $("player").hidden = true;
+}
+
+$("player-close").addEventListener("click", closePlayer);
+$("player-play").addEventListener("click", () => { setPlaying(!player.playing); nudgeChrome(); });
+$("player").addEventListener("click", (event) => {
+  // A tap on the chrome activates it; a tap anywhere else only reveals it.
+  if (!event.target.closest(".player-btn")) nudgeChrome();
+});
+$("player-chrome").addEventListener("focusin", () => {
+  clearTimeout(player.hideTimer);
+  $("player-chrome").dataset.hidden = "false";
+});
+document.addEventListener("keydown", (event) => {
+  if ($("player").hidden) return;
+  if (event.key === "Escape") closePlayer();
+  if (event.key === " ") { event.preventDefault(); setPlaying(!player.playing); nudgeChrome(); }
+});
+
+function playerStatus(text) {
+  const box = $("player-status");
+  box.hidden = !text;
+  box.textContent = text || "";
+}
+
+$("tl-view").addEventListener("click", async () => {
+  if (!timelapseGame) return;
+  const canvas = $("player-canvas");
+  canvas.width = CANVAS_W;
+  canvas.height = CANVAS_H;
+  player.ctx = canvas.getContext("2d");
+
+  $("player-title").textContent = timelapseGame.name;
+  $("player").hidden = false;
+  nudgeChrome();
+  playerStatus("Loading frames…");
+
+  const workouts = await loadTimelapseWorkouts(timelapseGame.id);
+  if (!workouts.length) return void playerStatus("No photos for this game yet.");
+
+  player.bitmaps = await loadBitmaps(workouts,
+    (done, total) => playerStatus(`Loading frames… ${done} / ${total}`));
+
+  if (!player.bitmaps.length) return void playerStatus("None of the photos could be loaded.");
+
+  playerStatus("");
+  player.index = 0;
+  paint();
+  setPlaying(true);
+});
+
+$("tl-save").addEventListener("click", async () => {
+  if (!timelapseGame) return;
+  const button = $("tl-save");
+  const original = button.textContent;
+  button.disabled = true;
+
+  try {
+    if (!isExportSupported()) throw new Error("This browser can't encode video.");
+
+    button.textContent = "Loading…";
+    const workouts = await loadTimelapseWorkouts(timelapseGame.id);
+    if (!workouts.length) throw new Error("No photos for this game yet.");
+
+    const bitmaps = await loadBitmaps(workouts,
+      (done, total) => { button.textContent = `Loading ${done}/${total}`; });
+    if (!bitmaps.length) throw new Error("None of the photos could be loaded.");
+
+    const blob = await encodeTimelapse(bitmaps,
+      { onProgress: (done, total) => { button.textContent = `Encoding ${done}/${total}`; } });
+    for (const bitmap of bitmaps) bitmap.close?.();
+
+    const filename = timelapseFilename(timelapseGame.name);
+    const file = new File([blob], filename, { type: "video/mp4" });
+
+    // Sharing puts Instagram straight in the sheet; downloading is the fallback.
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: timelapseGame.name });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    }
+    button.textContent = "Saved";
+    setTimeout(() => { button.textContent = original; }, 2500);
+  } catch (err) {
+    if (err?.name !== "AbortError") {   // the user dismissing the share sheet
+      $("recent-note").textContent = `Timelapse failed: ${err.message}`;
+    }
+    button.textContent = original;
+  } finally {
+    button.disabled = false;
+  }
+});
 
 // ---- same climb already stored ------------------------------------------
 // A second photo of a workout already logged is usually a better shot of the
@@ -202,6 +422,7 @@ $("dup-replace").addEventListener("click", async () => {
     if (!res.ok) throw new Error(out.error || res.statusText);
 
     lastWorkoutId = out.workoutId;
+    if (currentFile) putFrame(out.workoutId, currentFile);
     $("done-head").textContent = "Photo replaced.";
     $("done-sub").textContent = out.health.logged
       ? "Still one workout, already in Google Health."
@@ -311,7 +532,11 @@ $("sign-out").addEventListener("click", () => signOut(auth));
 $("camera").addEventListener("change", (e) => e.target.files[0] && handleImage(e.target.files[0]));
 $("picker").addEventListener("change", (e) => e.target.files[0] && handleImage(e.target.files[0]));
 $("save").addEventListener("click", save);
-$("again").addEventListener("click", () => { show("view-pick"); refreshPendingHealth(); });
+$("again").addEventListener("click", () => {
+  show("view-pick");
+  refreshPendingHealth();
+  loadGamesForTimelapse(auth.currentUser.uid);
+});
 $("discard").addEventListener("click", () => show("view-pick"));
 
 onAuthStateChanged(auth, async (user) => {
@@ -322,6 +547,7 @@ onAuthStateChanged(auth, async (user) => {
   if (shared) return handleImage(shared);
 
   refreshPendingHealth();
+  loadGamesForTimelapse(user.uid);
 
   const last = await getDocs(query(
     collection(db, "users", user.uid, "games"), orderBy("lastPlayedAt", "desc"), limit(1)));

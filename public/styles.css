@@ -233,3 +233,53 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
 }
 .dup-shot:last-child figcaption { color: var(--amber); }
 .dup-note { margin: 0; font-size: 0.88rem; color: var(--ink-mute); }
+
+/* ---- timelapse entry points ---------------------------------------- */
+.tl-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.tl-actions .btn { flex: 1 1 8rem; }
+.linkish {
+  flex: 1 1 100%;
+  background: none; border: 0; padding: 0.35rem 0;
+  font: inherit; font-size: 0.9rem; color: var(--ink-mute);
+  text-decoration: underline; cursor: pointer; text-align: center;
+}
+.linkish:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+/* ---- fullscreen player ---------------------------------------------- */
+.player {
+  position: fixed; inset: 0; z-index: 50;
+  background: #000; display: grid; place-items: center;
+}
+.player-canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
+
+/* Chrome fades out on its own and returns on a tap. Pointer events are off
+   while hidden so the first tap only reveals — reaching for the screen must
+   not hit Close. */
+.player-chrome {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: max(1rem, env(safe-area-inset-top)) 1rem max(1rem, env(safe-area-inset-bottom));
+  opacity: 1; transition: opacity 260ms ease;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.55), transparent 22%,
+                                          transparent 78%, rgba(0,0,0,0.55));
+}
+.player-chrome[data-hidden="true"] { opacity: 0; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) { .player-chrome { transition: none; } }
+
+.player-top, .player-bottom { display: flex; align-items: center; gap: 0.75rem; }
+.player-title { margin: 0; font-weight: 700; flex: 1; font-size: 0.98rem; }
+.player-count { margin: 0; font-size: 0.85rem; color: var(--ink-mute);
+  font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
+.player-btn {
+  font: inherit; font-size: 0.9rem; font-weight: 600;
+  background: rgba(255,255,255,0.14); color: var(--ink);
+  border: 0; border-radius: 8px; padding: 0.45rem 0.85rem; cursor: pointer;
+}
+.player-track { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); }
+.player-bar { height: 100%; width: 0; border-radius: 2px; background: var(--amber); }
+
+.player-status {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  background: rgba(0,0,0,0.75); padding: 0.9rem 1.2rem; border-radius: 12px;
+  font-size: 0.95rem; text-align: center; max-width: 80%;
+}
