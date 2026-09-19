@@ -147,8 +147,24 @@ access).
   but unverified is the right state here.
 
 - **Google Auth Platform → Clients** → create an **OAuth client ID** of type
-  *Web application*, add your hosting URL as an authorised JavaScript origin,
-  and put its id in `public/firebase-config.js` as `googleOAuthClientId`.
+  *Web application*. Put its id in `public/firebase-config.js` as
+  `googleOAuthClientId`, and under **Authorized JavaScript origins** add
+  **both** domains Firebase serves the app on:
+
+  ```
+  https://<project-id>.web.app
+  https://<project-id>.firebaseapp.com
+  ```
+
+  Leave *Authorized redirect URIs* empty — the consent flow uses
+  `ux_mode: "popup"` with `redirectUri: "postmessage"`, which authorises by
+  origin. Registering only one of the two domains gives an *intermittent*
+  `Error 401: invalid_client — No registered origin` when the installed PWA
+  happens to launch from the other. Origin changes can take minutes to hours to
+  propagate, so retry before changing anything else.
+
+  > The client has to exist *after* hosting is deployed, or you won't know the
+  > URL to register. If you created it earlier, go back and add the origins.
 
 An unverified OAuth client is capped at **100 users**, which needs no security
 review. Beyond that Google requires a third-party security review.
