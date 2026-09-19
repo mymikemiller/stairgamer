@@ -3,9 +3,9 @@
 // governed by firestore.rules and storage.rules.
 export const firebaseConfig = {
   apiKey: "REPLACE_ME",
-  authDomain: "REPLACE_ME.firebaseapp.com",
-  projectId: "REPLACE_ME",
-  storageBucket: "REPLACE_ME.firebasestorage.app",
+  authDomain: "stairgamer-us.firebaseapp.com",
+  projectId: "stairgamer-us",
+  storageBucket: "stairgamer-us.firebasestorage.app",
   appId: "REPLACE_ME",
 };
 
