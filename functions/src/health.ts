@@ -133,6 +133,37 @@ export async function refreshAccessToken(
   return body.access_token;
 }
 
+
+// The API reports failures as a JSON envelope. Surfacing that raw puts a wall
+// of escaped JSON in front of the user, and it gets stored on the workout too,
+// so it is worth reducing to a sentence they can act on.
+export function describeApiError(status: number, body: string): string {
+  let parsed: any;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return `Google Health rejected the workout (HTTP ${status}).`;
+  }
+
+  const error = parsed?.error ?? {};
+  const info = (error.details ?? []).find((d: any) => d?.reason);
+  const reason: string | undefined = info?.reason;
+
+  // The one failure a user actually has to do something about: Google Health
+  // runs on Fitbit's backend, and an account has no health profile until it is
+  // set up there.
+  if (reason === "ACCOUNT_NOT_LINKED") {
+    const link = info?.metadata?.redirect_uri ?? "https://fitbit.google.com/auth/signup";
+    return `This Google account isn't set up for Google Health yet. `
+      + `Set it up at ${link}, then log the workout again.`;
+  }
+
+  const message = typeof error.message === "string" && error.message.trim()
+    ? error.message.trim()
+    : `HTTP ${status}`;
+  return `Google Health rejected the workout: ${message}`;
+}
+
 export async function logWorkout(
   args: WorkoutFacts & { accessToken: string },
   fetchImpl: typeof fetch = fetch,
@@ -149,8 +180,7 @@ export async function logWorkout(
   });
 
   if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    throw new Error(`Google Health write failed (${res.status}): ${detail}`.trim());
+    throw new Error(describeApiError(res.status, await res.text().catch(() => "")));
   }
 
   const body = await res.json().catch(() => ({} as any));
