@@ -67,10 +67,14 @@ degrades. One opt-in test runs the real API against the four sample photos and
 asserts their known values:
 
 ```bash
-ANTHROPIC_API_KEY=sk-... RUN_LIVE_TESTS=1 npm test -- extract.live
+# from the repo root
+ANTHROPIC_API_KEY=sk-ant-... RUN_LIVE_TESTS=1 \
+  npm --prefix functions test -- extract.live
 ```
 
-Run it after any change to `extract.ts`.
+Run it after any change to `extract.ts`. It costs a few cents — nine requests
+carrying a full-size photo each — and needs a real key; without one every case
+fails with "Could not resolve authentication method".
 
 ## Set up
 
