@@ -1,0 +1,15 @@
+/* Shared by the privacy and terms pages. Same palette as the app, set for
+   reading rather than for glancing at mid-workout. */
+.doc { max-width: 38rem; margin: 0 auto; }
+.doc h1 { font-size: 1.9rem; font-weight: 800; font-variation-settings: "wdth" 115; margin: 0 0 0.25rem; }
+.doc .updated { color: var(--ink-mute); margin: 0 0 2rem; font-size: 0.9rem; }
+.doc h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; font-weight: 700; }
+.doc p, .doc li { line-height: 1.65; }
+.doc ul { padding-left: 1.2rem; }
+.doc li { margin-bottom: 0.4rem; }
+.doc a { color: var(--amber); }
+.doc code { background: var(--surface); padding: 0.1rem 0.35rem; border-radius: 5px; font-size: 0.9em; }
+.doc .back { display: inline-block; margin-top: 2.5rem; color: var(--ink-mute); }
+.doc table { border-collapse: collapse; width: 100%; margin: 0.5rem 0 1rem; }
+.doc th, .doc td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--rule); vertical-align: top; font-size: 0.95rem; }
+.doc th { color: var(--ink-mute); font-weight: 600; }
