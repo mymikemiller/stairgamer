@@ -416,8 +416,11 @@ $("tl-save").addEventListener("click", async () => {
     }
 
     // Each frame is decoded inside the encoder, one at a time.
-    const blob = await encodeTimelapse(frames.map((f) => ({ load: async () => f.blob })),
-      { onProgress: (done, total) => { button.textContent = `Encoding ${done}/${total}`; } });
+    const blob = await encodeTimelapse(frames.map((f) => ({ load: async () => f.blob })), {
+      onProgress: (done, total, phase) => {
+        button.textContent = phase ?? `Encoding ${done}/${total}`;
+      },
+    });
 
     const filename = timelapseFilename(timelapseGame.name);
     const file = new File([blob], filename, { type: "video/mp4" });

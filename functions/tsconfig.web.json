@@ -18,6 +18,7 @@
     "src/stairs.ts",
     "src/games.ts",
     "src/confirmState.ts",
-    "src/timelapseRange.ts"
+    "src/timelapseRange.ts",
+    "src/avcLevel.ts"
   ]
 }
