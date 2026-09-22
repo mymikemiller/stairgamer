@@ -283,3 +283,11 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
   background: rgba(0,0,0,0.75); padding: 0.9rem 1.2rem; border-radius: 12px;
   font-size: 0.95rem; text-align: center; max-width: 80%;
 }
+
+/* ---- timelapse date range ------------------------------------------- */
+.range { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+.range-field { display: flex; flex-direction: column; gap: 0.3rem; }
+.range-field span { font-size: 0.8rem; font-weight: 600; color: var(--ink-mute); }
+.range-field input { min-width: 0; }
+.editor-list button[aria-current="true"] { border-color: var(--amber); }
+.editor-list .picker-all { font-weight: 700; }

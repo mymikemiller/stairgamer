@@ -14,5 +14,10 @@
   // The pure modules only. Shipping the same source to both sides is what
   // stops the conversion and game-matching rules from drifting between the
   // confirmation screen and the server that stores the result.
-  "files": ["src/stairs.ts", "src/games.ts", "src/confirmState.ts"]
+  "files": [
+    "src/stairs.ts",
+    "src/games.ts",
+    "src/confirmState.ts",
+    "src/timelapseRange.ts"
+  ]
 }

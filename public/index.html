@@ -169,11 +169,27 @@
 <!-- Game picker for the timelapse -->
 <dialog id="game-picker">
   <form method="dialog" class="editor-form">
-    <h2 class="editor-title">Timelapse game</h2>
+    <h2 class="editor-title">Timelapse</h2>
     <p class="editor-hint">Most recently played first.</p>
     <div id="picker-list" class="editor-list"></div>
+
+    <div class="range">
+      <label class="range-field">
+        <span>From</span>
+        <input id="range-start" type="date" class="editor-input">
+      </label>
+      <label class="range-field">
+        <span>To</span>
+        <input id="range-end" type="date" class="editor-input">
+      </label>
+    </div>
+    <p class="editor-hint">Leave a date empty for no limit.</p>
+    <p id="range-warn" class="field-note note-warn" hidden></p>
+
     <menu class="editor-actions">
+      <button type="button" id="range-clear" class="btn btn-quiet">Clear dates</button>
       <button value="cancel" class="btn btn-quiet">Cancel</button>
+      <button id="picker-done" value="ok" class="btn btn-primary">Done</button>
     </menu>
   </form>
 </dialog>

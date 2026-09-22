@@ -17,6 +17,9 @@ import {
   drawFrame, loadFrameBlob, encodeTimelapse, isExportSupported,
   timelapseFilename, CANVAS_W, CANVAS_H, FRAME_MS,
 } from "/timelapse.js";
+import {
+  ALL_GAMES, startOfDayLocal, endOfDayLocal, isValidRange, describeRange, resolveSelection,
+} from "/lib/timelapseRange.js";
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -175,23 +178,32 @@ async function save() {
 // unpinned timelapse follows whatever game is being played now, and picking the
 // current top game is identical to clearing the pin.
 const PIN_KEY = "stairgamer.timelapseGameId";
-const readPin = () => { try { return localStorage.getItem(PIN_KEY); } catch { return null; } };
-const writePin = (id) => {
-  try { id ? localStorage.setItem(PIN_KEY, id) : localStorage.removeItem(PIN_KEY); } catch {}
+const START_KEY = "stairgamer.timelapseStart";
+const END_KEY = "stairgamer.timelapseEnd";
+
+const readStore = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+const writeStore = (key, value) => {
+  try { value ? localStorage.setItem(key, value) : localStorage.removeItem(key); } catch {}
 };
 
 let allGames = [];        // most recent first
 let timelapseGame = null;
 
 function applyTimelapseGame() {
-  const pinnedId = readPin();
-  const pinned = pinnedId ? allGames.find((g) => g.id === pinnedId) : null;
-  timelapseGame = pinned ?? allGames[0] ?? null;
+  timelapseGame = resolveSelection(readStore(PIN_KEY), allGames);
 
-  const differs = timelapseGame && allGames[0] && timelapseGame.id !== allGames[0].id;
+  // The game line shows only when it differs from what is being played now —
+  // "all games" always differs, so it always shows.
+  const differs = timelapseGame
+    && (timelapseGame.all || (allGames[0] && timelapseGame.id !== allGames[0].id));
+  const range = describeRange(readStore(START_KEY), readStore(END_KEY));
+
   const note = $("timelapse-game-note");
-  note.hidden = !differs;
-  if (differs) note.textContent = `Timelapse game: ${timelapseGame.name}`;
+  const parts = [];
+  if (differs) parts.push(`Timelapse game: ${timelapseGame.name}`);
+  if (range) parts.push(`Timelapse dates: ${range}`);
+  note.hidden = parts.length === 0;
+  note.innerHTML = parts.map((p) => `<span>${p}</span>`).join("<br>");
 
   $("timelapse-actions").hidden = !timelapseGame;
 }
@@ -204,10 +216,20 @@ async function loadGamesForTimelapse(uid) {
   applyTimelapseGame();
 }
 
-async function loadTimelapseWorkouts(gameId) {
+async function loadTimelapseWorkouts(selection) {
+  const clauses = [];
+  // "All games" drops the equality filter, leaving a plain ordered scan.
+  if (!selection.all) clauses.push(where("gameId", "==", selection.id));
+
+  const from = startOfDayLocal(readStore(START_KEY));
+  const to = endOfDayLocal(readStore(END_KEY));
+  if (from) clauses.push(where("climbedAt", ">=", from));
+  if (to) clauses.push(where("climbedAt", "<=", to));
+
   const snap = await getDocs(query(
     collection(db, "users", auth.currentUser.uid, "workouts"),
-    where("gameId", "==", gameId), orderBy("climbedAt", "asc")));
+    ...clauses, orderBy("climbedAt", "asc")));
+
   return snap.docs.map((d) => ({ id: d.id, imagePath: d.get("imagePath") }))
     .filter((w) => w.imagePath);
 }
@@ -227,23 +249,63 @@ async function loadBitmaps(workouts, onProgress) {
   return bitmaps;
 }
 
-$("tl-pick").addEventListener("click", () => {
+let draftPick = null;   // selection inside the open dialog, applied on Done
+
+function renderPicker() {
   const list = $("picker-list");
   list.innerHTML = "";
-  for (const game of allGames) {
+
+  const total = allGames.reduce((sum, g) => sum + g.count, 0);
+  const rows = [
+    { id: ALL_GAMES, label: `All games — ${total} workout${total === 1 ? "" : "s"}`, all: true },
+    ...allGames.map((g) => ({
+      id: g.id, label: `${g.name} — ${g.count} workout${g.count === 1 ? "" : "s"}` })),
+  ];
+
+  for (const row of rows) {
     const button = document.createElement("button");
     button.type = "button";
-    button.textContent = `${game.name} — ${game.count} workout${game.count === 1 ? "" : "s"}`;
-    button.setAttribute("aria-current", String(game.id === timelapseGame?.id));
-    button.addEventListener("click", () => {
-      // Choosing the current top game clears the pin rather than freezing it.
-      writePin(game.id === allGames[0]?.id ? null : game.id);
-      applyTimelapseGame();
-      $("game-picker").close();
-    });
+    button.textContent = row.label;
+    if (row.all) button.classList.add("picker-all");
+    button.setAttribute("aria-current", String(row.id === draftPick));
+    button.addEventListener("click", () => { draftPick = row.id; renderPicker(); });
     list.appendChild(button);
   }
+}
+
+function validateRange() {
+  const ok = isValidRange($("range-start").value, $("range-end").value);
+  $("range-warn").hidden = ok;
+  $("range-warn").textContent = ok ? "" : "The end date is before the start date.";
+  $("picker-done").disabled = !ok;
+  return ok;
+}
+
+$("tl-pick").addEventListener("click", () => {
+  draftPick = readStore(PIN_KEY) ?? allGames[0]?.id ?? null;
+  $("range-start").value = readStore(START_KEY) ?? "";
+  $("range-end").value = readStore(END_KEY) ?? "";
+  renderPicker();
+  validateRange();
   $("game-picker").showModal();
+});
+
+$("range-start").addEventListener("input", validateRange);
+$("range-end").addEventListener("input", validateRange);
+$("range-clear").addEventListener("click", () => {
+  $("range-start").value = "";
+  $("range-end").value = "";
+  validateRange();
+});
+
+$("game-picker").addEventListener("close", () => {
+  if ($("game-picker").returnValue !== "ok") return;
+  // Choosing the game already at the top clears the pin rather than freezing
+  // it, so a new game takes over automatically. "All games" always pins.
+  writeStore(PIN_KEY, draftPick === allGames[0]?.id ? null : draftPick);
+  writeStore(START_KEY, $("range-start").value || null);
+  writeStore(END_KEY, $("range-end").value || null);
+  applyTimelapseGame();
 });
 
 // ---- player --------------------------------------------------------------
@@ -322,8 +384,8 @@ $("tl-view").addEventListener("click", async () => {
   nudgeChrome();
   playerStatus("Loading frames…");
 
-  const workouts = await loadTimelapseWorkouts(timelapseGame.id);
-  if (!workouts.length) return void playerStatus("No photos for this game yet.");
+  const workouts = await loadTimelapseWorkouts(timelapseGame);
+  if (!workouts.length) return void playerStatus("No photos match that game and date range.");
 
   player.bitmaps = await loadBitmaps(workouts,
     (done, total) => playerStatus(`Loading frames… ${done} / ${total}`));
@@ -346,8 +408,8 @@ $("tl-save").addEventListener("click", async () => {
     if (!isExportSupported()) throw new Error("This browser can't encode video.");
 
     button.textContent = "Loading…";
-    const workouts = await loadTimelapseWorkouts(timelapseGame.id);
-    if (!workouts.length) throw new Error("No photos for this game yet.");
+    const workouts = await loadTimelapseWorkouts(timelapseGame);
+    if (!workouts.length) throw new Error("No photos match that game and date range.");
 
     const bitmaps = await loadBitmaps(workouts,
       (done, total) => { button.textContent = `Loading ${done}/${total}`; });
