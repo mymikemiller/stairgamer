@@ -28,21 +28,49 @@ export function drawFrame(ctx, bitmap) {
 }
 
 // Cache first; a miss falls back to Storage and warms the cache so the next
-// run is local. `resolveUrl` is injected so this file needs no Firebase import.
-export async function loadFrameBlob(workout, resolveUrl) {
+// run is local. `fetchBlob` is injected so this file needs no Firebase import.
+export async function loadFrameBlob(workout, fetchBlob) {
   const cached = await getFrame(workout.id);
   if (cached) return cached;
 
-  const response = await fetch(await resolveUrl(workout.imagePath));
-  if (!response.ok) throw new Error(`could not load frame (${response.status})`);
-  const blob = await response.blob();
-
+  const blob = await fetchBlob(workout.imagePath);
   putFrame(workout.id, blob); // deliberately not awaited
   return blob;
 }
 
 export function isExportSupported() {
   return typeof VideoEncoder !== "undefined" && typeof VideoFrame !== "undefined";
+}
+
+// An H.264 level caps the coded frame area. Level 3.1 — the usual default —
+// tops out at 1280x720, so a portrait 1080x1920 frame is refused outright:
+//   "coded area (1088*1920) exceeds the maximum coded area (921600)".
+//
+// Rather than hardcode a level and hope, ask the encoder. Profiles are tried
+// most-compatible first; a device whose hardware encoder only does High will
+// fall through to it instead of failing.
+const CODEC_CANDIDATES = [
+  "avc1.42E02A", // constrained baseline, level 4.2
+  "avc1.4D402A", // main, level 4.2
+  "avc1.64002A", // high, level 4.2
+  "avc1.42E028", // constrained baseline, level 4.0
+  "avc1.640028", // high, level 4.0
+];
+
+export async function pickCodec(width, height, bitrate, framerate) {
+  const errors = [];
+  for (const codec of CODEC_CANDIDATES) {
+    try {
+      const { supported } = await VideoEncoder.isConfigSupported({
+        codec, width, height, bitrate, framerate,
+      });
+      if (supported) return codec;
+      errors.push(codec);
+    } catch (err) {
+      errors.push(`${codec} (${err.message})`);
+    }
+  }
+  throw new Error(`No H.264 configuration this device accepts at ${width}x${height}. Tried: ${errors.join(", ")}`);
 }
 
 // Encodes the frames to H.264/MP4. `onProgress(done, total)` drives the UI,
@@ -64,7 +92,7 @@ export async function encodeTimelapse(bitmaps, { onProgress } = {}) {
   });
 
   encoder.configure({
-    codec: "avc1.42001f", // baseline 3.1 — the widest-accepted profile
+    codec: await pickCodec(CANVAS_W, CANVAS_H, BITRATE, FPS),
     width: CANVAS_W,
     height: CANVAS_H,
     bitrate: BITRATE,

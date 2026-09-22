@@ -6,7 +6,7 @@ import {
   getFirestore, collection, query, orderBy, limit, getDocs, where,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import {
-  getStorage, ref as storageRef, getDownloadURL,
+  getStorage, ref as storageRef, getBlob,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js";
 
 import { firebaseConfig, googleOAuthClientId } from "/firebase-config.js";
@@ -234,19 +234,28 @@ async function loadTimelapseWorkouts(selection) {
     .filter((w) => w.imagePath);
 }
 
-const frameUrl = (path) => getDownloadURL(storageRef(storage, path));
+// getBlob rather than getDownloadURL: images are written by the Admin SDK, which
+// sets no firebaseStorageDownloadTokens, so getDownloadURL fails with
+// storage/no-download-url for every object. getBlob reads through the
+// authenticated API and obeys the storage rules instead — which also avoids
+// minting public bearer URLs for personal workout photos.
+const frameBlob = (path) => getBlob(storageRef(storage, path));
 
 async function loadBitmaps(workouts, onProgress) {
   const bitmaps = [];
+  let firstError = null;
   for (const [i, workout] of workouts.entries()) {
     try {
-      bitmaps.push(await createImageBitmap(await loadFrameBlob(workout, frameUrl)));
-    } catch {
-      // One unreadable frame should not lose the whole timelapse.
+      bitmaps.push(await createImageBitmap(await loadFrameBlob(workout, frameBlob)));
+    } catch (err) {
+      // One unreadable frame should not lose the whole timelapse, but the
+      // reason has to survive: swallowing it turned a bucket CORS failure into
+      // an unexplained "none of the photos could be loaded".
+      firstError ??= err;
     }
     onProgress?.(i + 1, workouts.length);
   }
-  return bitmaps;
+  return { bitmaps, firstError };
 }
 
 let draftPick = null;   // selection inside the open dialog, applied on Done
@@ -387,10 +396,14 @@ $("tl-view").addEventListener("click", async () => {
   const workouts = await loadTimelapseWorkouts(timelapseGame);
   if (!workouts.length) return void playerStatus("No photos match that game and date range.");
 
-  player.bitmaps = await loadBitmaps(workouts,
+  const loaded = await loadBitmaps(workouts,
     (done, total) => playerStatus(`Loading frames… ${done} / ${total}`));
+  player.bitmaps = loaded.bitmaps;
 
-  if (!player.bitmaps.length) return void playerStatus("None of the photos could be loaded.");
+  if (!player.bitmaps.length) {
+    return void playerStatus(
+      `Couldn't load any photos. ${loaded.firstError?.message ?? ""}`.trim());
+  }
 
   playerStatus("");
   player.index = 0;
@@ -411,9 +424,11 @@ $("tl-save").addEventListener("click", async () => {
     const workouts = await loadTimelapseWorkouts(timelapseGame);
     if (!workouts.length) throw new Error("No photos match that game and date range.");
 
-    const bitmaps = await loadBitmaps(workouts,
+    const { bitmaps, firstError } = await loadBitmaps(workouts,
       (done, total) => { button.textContent = `Loading ${done}/${total}`; });
-    if (!bitmaps.length) throw new Error("None of the photos could be loaded.");
+    if (!bitmaps.length) {
+      throw new Error(`Couldn't load any photos. ${firstError?.message ?? ""}`.trim());
+    }
 
     const blob = await encodeTimelapse(bitmaps,
       { onProgress: (done, total) => { button.textContent = `Encoding ${done}/${total}`; } });
@@ -461,7 +476,7 @@ async function showDuplicate(duplicate) {
   $("dup-new").src = URL.createObjectURL(currentFile);
   $("dup-old").removeAttribute("src");
   try {
-    $("dup-old").src = await getDownloadURL(storageRef(storage, duplicate.imagePath));
+    $("dup-old").src = URL.createObjectURL(await frameBlob(duplicate.imagePath));
   } catch {
     $("dup-old").alt = "The stored photo could not be loaded";
   }
