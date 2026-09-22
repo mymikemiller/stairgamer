@@ -15,6 +15,15 @@ export const FRAME_MS = 400;
 const FPS = 30;
 const BITRATE = 2_500_000;
 
+// Decoding a stored 2576px photo yields a 34MB RGBA bitmap; at canvas size it
+// is 5.9MB. Across a few hundred frames that is the difference between 7GB and
+// something a phone can hold, so every decode is capped here.
+// resizeWidth alone preserves the aspect ratio, which is right for any photo
+// wider than 9:16 — i.e. every phone photo.
+export async function decodeToFit(blob) {
+  return createImageBitmap(blob, { resizeWidth: CANVAS_W, resizeQuality: "medium" });
+}
+
 // Contained, never cropped: a landscape photo center-cropped to portrait loses
 // the machine's display off both edges, and the numbers are the whole point.
 export function drawFrame(ctx, bitmap) {
@@ -73,9 +82,14 @@ export async function pickCodec(width, height, bitrate, framerate) {
   throw new Error(`No H.264 configuration this device accepts at ${width}x${height}. Tried: ${errors.join(", ")}`);
 }
 
-// Encodes the frames to H.264/MP4. `onProgress(done, total)` drives the UI,
-// because even fast encoding takes a moment across a long series.
-export async function encodeTimelapse(bitmaps, { onProgress } = {}) {
+// Encodes to H.264/MP4, pulling one frame at a time.
+//
+// `frames` is a list of { load(): Promise<Blob> }. Nothing is decoded ahead of
+// time: holding every bitmap at once is what exhausted the encoder, and the
+// failure surfaced only as "Cannot call 'encode' on a closed codec".
+//
+// `onProgress(done, total)` drives the UI.
+export async function encodeTimelapse(frames, { onProgress } = {}) {
   if (!isExportSupported()) {
     throw new Error("This browser can't encode video (WebCodecs unavailable).");
   }
@@ -86,9 +100,14 @@ export async function encodeTimelapse(bitmaps, { onProgress } = {}) {
     fastStart: "in-memory", // moov atom up front, so uploads can stream it
   });
 
+  // The error callback fires asynchronously from the codec, so throwing inside
+  // it cannot reach this function — it only closes the codec, and the next
+  // encode() reports a closed codec instead of the real cause. Capture it and
+  // rethrow from the loop.
+  let codecError = null;
   const encoder = new VideoEncoder({
     output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
-    error: (err) => { throw err; },
+    error: (err) => { codecError ??= err; },
   });
 
   encoder.configure({
@@ -105,30 +124,51 @@ export async function encodeTimelapse(bitmaps, { onProgress } = {}) {
   const microsPerFrame = 1_000_000 / FPS;
   let index = 0;
 
-  for (const [i, bitmap] of bitmaps.entries()) {
-    drawFrame(ctx, bitmap);
+  const throwIfFailed = () => {
+    if (codecError) throw new Error(`Encoder failed: ${codecError.message}`);
+  };
 
-    // Each photo is held for several video frames rather than encoded once at a
-    // low framerate: players handle a normal 30fps stream far more predictably.
-    for (let repeat = 0; repeat < framesPerImage; repeat++) {
-      const frame = new VideoFrame(canvas, {
-        timestamp: Math.round(index * microsPerFrame),
-        duration: Math.round(microsPerFrame),
-      });
-      encoder.encode(frame, { keyFrame: repeat === 0 });
-      frame.close();
-      index++;
+  // Real backpressure. A single yield per image let ~2,500 frames pile up in a
+  // hardware encoder that has a finite pool of buffers.
+  const drain = async (limit) => {
+    while (encoder.encodeQueueSize > limit) {
+      throwIfFailed();
+      await new Promise((resolve) => setTimeout(resolve, 4));
+    }
+  };
+
+  try {
+    for (const [i, frame] of frames.entries()) {
+      throwIfFailed();
+
+      const bitmap = await decodeToFit(await frame.load());
+      drawFrame(ctx, bitmap);
+      bitmap.close();   // released before the next one is decoded
+
+      // Each photo is held for several video frames rather than encoded once at
+      // a low framerate: players handle a normal 30fps stream far more
+      // predictably.
+      for (let repeat = 0; repeat < framesPerImage; repeat++) {
+        await drain(16);
+        const videoFrame = new VideoFrame(canvas, {
+          timestamp: Math.round(index * microsPerFrame),
+          duration: Math.round(microsPerFrame),
+        });
+        encoder.encode(videoFrame, { keyFrame: repeat === 0 });
+        videoFrame.close();
+        index++;
+      }
+
+      onProgress?.(i + 1, frames.length);
     }
 
-    onProgress?.(i + 1, bitmaps.length);
-    // Yield so a long encode cannot lock the UI thread.
-    if (encoder.encodeQueueSize > 30) await new Promise((r) => setTimeout(r, 0));
+    await encoder.flush();
+    throwIfFailed();
+  } finally {
+    if (encoder.state !== "closed") encoder.close();
   }
 
-  await encoder.flush();
-  encoder.close();
   muxer.finalize();
-
   return new Blob([muxer.target.buffer], { type: "video/mp4" });
 }
 

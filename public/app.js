@@ -14,7 +14,7 @@ import { takeSharedImage } from "/share.js";
 import { createConfirmScreen } from "/confirm.js";
 import { putFrame } from "/frameCache.js";
 import {
-  drawFrame, loadFrameBlob, encodeTimelapse, isExportSupported,
+  drawFrame, decodeToFit, loadFrameBlob, encodeTimelapse, isExportSupported,
   timelapseFilename, CANVAS_W, CANVAS_H, FRAME_MS,
 } from "/timelapse.js";
 import {
@@ -241,12 +241,14 @@ async function loadTimelapseWorkouts(selection) {
 // minting public bearer URLs for personal workout photos.
 const frameBlob = (path) => getBlob(storageRef(storage, path));
 
-async function loadBitmaps(workouts, onProgress) {
-  const bitmaps = [];
+// Fetches the compressed blobs only. Decoding all of them up front is what
+// broke the encoder: 211 full-size photos decode to ~7GB of RGBA.
+async function loadFrameBlobs(workouts, onProgress) {
+  const frames = [];
   let firstError = null;
   for (const [i, workout] of workouts.entries()) {
     try {
-      bitmaps.push(await createImageBitmap(await loadFrameBlob(workout, frameBlob)));
+      frames.push({ blob: await loadFrameBlob(workout, frameBlob) });
     } catch (err) {
       // One unreadable frame should not lose the whole timelapse, but the
       // reason has to survive: swallowing it turned a bucket CORS failure into
@@ -255,39 +257,7 @@ async function loadBitmaps(workouts, onProgress) {
     }
     onProgress?.(i + 1, workouts.length);
   }
-  return { bitmaps, firstError };
-}
-
-let draftPick = null;   // selection inside the open dialog, applied on Done
-
-function renderPicker() {
-  const list = $("picker-list");
-  list.innerHTML = "";
-
-  const total = allGames.reduce((sum, g) => sum + g.count, 0);
-  const rows = [
-    { id: ALL_GAMES, label: `All games — ${total} workout${total === 1 ? "" : "s"}`, all: true },
-    ...allGames.map((g) => ({
-      id: g.id, label: `${g.name} — ${g.count} workout${g.count === 1 ? "" : "s"}` })),
-  ];
-
-  for (const row of rows) {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.textContent = row.label;
-    if (row.all) button.classList.add("picker-all");
-    button.setAttribute("aria-current", String(row.id === draftPick));
-    button.addEventListener("click", () => { draftPick = row.id; renderPicker(); });
-    list.appendChild(button);
-  }
-}
-
-function validateRange() {
-  const ok = isValidRange($("range-start").value, $("range-end").value);
-  $("range-warn").hidden = ok;
-  $("range-warn").textContent = ok ? "" : "The end date is before the start date.";
-  $("picker-done").disabled = !ok;
-  return ok;
+  return { frames, firstError };
 }
 
 $("tl-pick").addEventListener("click", () => {
@@ -319,19 +289,35 @@ $("game-picker").addEventListener("close", () => {
 
 // ---- player --------------------------------------------------------------
 const player = {
-  bitmaps: [], index: 0, timer: null, playing: false, hideTimer: null, ctx: null,
+  frames: [], index: 0, timer: null, playing: false, hideTimer: null, ctx: null,
+  painting: false,
 };
 
-function paint() {
-  const bitmap = player.bitmaps[player.index];
-  if (!bitmap) return;
-  drawFrame(player.ctx, bitmap);
-  $("player-bar").style.width = `${((player.index + 1) / player.bitmaps.length) * 100}%`;
-  $("player-count").textContent = `${player.index + 1} / ${player.bitmaps.length}`;
+// Decoded on demand and released immediately. 400ms per frame is ample time to
+// decode a 1080px JPEG, and it keeps one bitmap alive instead of hundreds.
+async function paint() {
+  const frame = player.frames[player.index];
+  if (!frame || player.painting) return;
+
+  player.painting = true;
+  const at = player.index;
+  try {
+    const bitmap = await decodeToFit(frame.blob);
+    // Bail if the user closed or skipped while this was decoding.
+    if (player.frames[at] === frame && !$("player").hidden) drawFrame(player.ctx, bitmap);
+    bitmap.close();
+  } catch {
+    // A single undecodable frame just holds the previous image.
+  } finally {
+    player.painting = false;
+  }
+
+  $("player-bar").style.width = `${((at + 1) / player.frames.length) * 100}%`;
+  $("player-count").textContent = `${at + 1} / ${player.frames.length}`;
 }
 
 function advance() {
-  player.index = (player.index + 1) % player.bitmaps.length;
+  player.index = (player.index + 1) % player.frames.length;
   paint();
 }
 
@@ -354,8 +340,7 @@ function nudgeChrome() {
 function closePlayer() {
   setPlaying(false);
   clearTimeout(player.hideTimer);
-  for (const bitmap of player.bitmaps) bitmap.close?.();
-  player.bitmaps = [];
+  player.frames = [];
   $("player").hidden = true;
 }
 
@@ -396,11 +381,11 @@ $("tl-view").addEventListener("click", async () => {
   const workouts = await loadTimelapseWorkouts(timelapseGame);
   if (!workouts.length) return void playerStatus("No photos match that game and date range.");
 
-  const loaded = await loadBitmaps(workouts,
+  const loaded = await loadFrameBlobs(workouts,
     (done, total) => playerStatus(`Loading frames… ${done} / ${total}`));
-  player.bitmaps = loaded.bitmaps;
+  player.frames = loaded.frames;
 
-  if (!player.bitmaps.length) {
+  if (!player.frames.length) {
     return void playerStatus(
       `Couldn't load any photos. ${loaded.firstError?.message ?? ""}`.trim());
   }
@@ -424,15 +409,15 @@ $("tl-save").addEventListener("click", async () => {
     const workouts = await loadTimelapseWorkouts(timelapseGame);
     if (!workouts.length) throw new Error("No photos match that game and date range.");
 
-    const { bitmaps, firstError } = await loadBitmaps(workouts,
+    const { frames, firstError } = await loadFrameBlobs(workouts,
       (done, total) => { button.textContent = `Loading ${done}/${total}`; });
-    if (!bitmaps.length) {
+    if (!frames.length) {
       throw new Error(`Couldn't load any photos. ${firstError?.message ?? ""}`.trim());
     }
 
-    const blob = await encodeTimelapse(bitmaps,
+    // Each frame is decoded inside the encoder, one at a time.
+    const blob = await encodeTimelapse(frames.map((f) => ({ load: async () => f.blob })),
       { onProgress: (done, total) => { button.textContent = `Encoding ${done}/${total}`; } });
-    for (const bitmap of bitmaps) bitmap.close?.();
 
     const filename = timelapseFilename(timelapseGame.name);
     const file = new File([blob], filename, { type: "video/mp4" });
