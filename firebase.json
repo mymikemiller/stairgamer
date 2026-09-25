@@ -10,6 +10,7 @@
       ".git",
       "scripts/**",
       "src/**/*.test.ts",
+      "test-stubs/**",
       "*.local"
     ]
   },
