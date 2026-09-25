@@ -102,6 +102,17 @@ describe("app.js", () => {
     expect(history.state?.player).toBeFalsy();   // its history entry is gone too
   });
 
+  it("the play button is an icon that toggles between pause and play", async () => {
+    await openPlayer();
+    const play = document.getElementById("player-play")!;
+    expect(play.textContent!.trim()).toBe("");
+    expect(play.dataset.playing).toBe("true");
+    expect(play.getAttribute("aria-label")).toBe("Pause");
+    play.click();
+    expect(play.dataset.playing).toBe("false");
+    expect(play.getAttribute("aria-label")).toBe("Play");
+  });
+
   it("back closes the player instead of leaving the app", async () => {
     await openPlayer();
     expect(history.state?.player).toBe(true);

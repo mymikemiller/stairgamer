@@ -372,7 +372,7 @@ function setPlaying(playing) {
   player.playing = playing;
   clearInterval(player.timer);
   if (playing) player.timer = setInterval(advance, FRAME_MS);
-  $("player-play").textContent = playing ? "Pause" : "Play";
+  $("player-play").dataset.playing = String(playing);
   $("player-play").setAttribute("aria-label", playing ? "Pause" : "Play");
 }
 

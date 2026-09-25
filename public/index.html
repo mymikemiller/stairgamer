@@ -164,7 +164,10 @@
       </button>
     </div>
     <div class="player-bottom">
-      <button id="player-play" class="player-btn" aria-label="Pause">Pause</button>
+      <button id="player-play" class="player-btn player-icon" aria-label="Pause" data-playing="true">
+        <svg class="icon-pause" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>
+        <svg class="icon-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z"/></svg>
+      </button>
       <div class="player-track"><div id="player-bar" class="player-bar"></div></div>
       <p id="player-count" class="player-count"></p>
     </div>

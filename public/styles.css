@@ -285,6 +285,10 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
   width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor;
   stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
 }
+/* Solid shapes, unlike the outlined Save and Share icons. */
+#player-play svg { fill: currentColor; stroke: none; }
+#player-play[data-playing="true"] .icon-play,
+#player-play[data-playing="false"] .icon-pause { display: none; }
 .player-btn-text { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .player-btn-text:empty { display: none; }
 /* aria-disabled rather than disabled: a tap on Share before the video exists
