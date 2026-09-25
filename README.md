@@ -129,6 +129,18 @@ enabled.
 (these values aren't secrets; `firestore.rules` and `storage.rules` govern
 access).
 
+The app signs in against its own host (`app.js` overrides `authDomain` with
+`location.host` on Firebase Hosting), so the installed PWA can use the redirect
+flow. In **Google Auth Platform → Clients**, open *Web client (auto created by
+Google Service)* and make sure **Authorized redirect URIs** lists both:
+
+```
+https://<project-id>.web.app/__/auth/handler
+https://<project-id>.firebaseapp.com/__/auth/handler
+```
+
+Without the `web.app` entry, sign-in fails with `redirect_uri_mismatch`.
+
 **3. Google Health API** — in the Google Cloud console for the same project:
 
 - Enable the **Google Health API**.

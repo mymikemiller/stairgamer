@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import {
-  getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged,
+  getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult,
+  signOut, onAuthStateChanged,
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js";
 import {
   getFirestore, collection, query, orderBy, limit, getDocs, where,
@@ -21,7 +22,16 @@ import {
   ALL_GAMES, startOfDayLocal, endOfDayLocal, isValidRange, describeRange, resolveSelection,
 } from "/lib/timelapseRange.js";
 
-const app = initializeApp(firebaseConfig);
+// Firebase Hosting serves the auth handler (/__/auth/*) on every domain the app
+// is served from. Using the page's own host keeps the redirect sign-in flow
+// same-origin, which Chrome's storage partitioning otherwise breaks. Each host
+// needs https://<host>/__/auth/handler as a redirect URI on the Firebase web
+// OAuth client.
+const onFirebaseHosting = /\.(web\.app|firebaseapp\.com)$/.test(location.hostname);
+const app = initializeApp({
+  ...firebaseConfig,
+  authDomain: onFirebaseHosting ? location.host : firebaseConfig.authDomain,
+});
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
@@ -258,6 +268,38 @@ async function loadFrameBlobs(workouts, onProgress) {
     onProgress?.(i + 1, workouts.length);
   }
   return { frames, firstError };
+}
+
+let draftPick = null;   // selection inside the open dialog, applied on Done
+
+function renderPicker() {
+  const list = $("picker-list");
+  list.innerHTML = "";
+
+  const total = allGames.reduce((sum, g) => sum + g.count, 0);
+  const rows = [
+    { id: ALL_GAMES, label: `All games — ${total} workout${total === 1 ? "" : "s"}`, all: true },
+    ...allGames.map((g) => ({
+      id: g.id, label: `${g.name} — ${g.count} workout${g.count === 1 ? "" : "s"}` })),
+  ];
+
+  for (const row of rows) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = row.label;
+    if (row.all) button.classList.add("picker-all");
+    button.setAttribute("aria-current", String(row.id === draftPick));
+    button.addEventListener("click", () => { draftPick = row.id; renderPicker(); });
+    list.appendChild(button);
+  }
+}
+
+function validateRange() {
+  const ok = isValidRange($("range-start").value, $("range-end").value);
+  $("range-warn").hidden = ok;
+  $("range-warn").textContent = ok ? "" : "The end date is before the start date.";
+  $("picker-done").disabled = !ok;
+  return ok;
 }
 
 $("tl-pick").addEventListener("click", () => {
@@ -589,10 +631,18 @@ $("pending-retry").addEventListener("click", async () => {
 });
 
 // ---- wiring -------------------------------------------------------------
-$("sign-in").addEventListener("click", () =>
-  signInWithPopup(auth, new GoogleAuthProvider()).catch((err) => {
-    $("app").querySelector(".lede").textContent = `Sign-in failed: ${err.message}`;
-  }));
+// The installed PWA can't use a popup: on Android it opens in a Custom Tab with
+// no link back to the app, so the sign-in never completes. Redirect instead.
+const isInstalledApp = matchMedia("(display-mode: standalone)").matches
+  || navigator.standalone === true;
+const signInFailed = (err) => {
+  $("app").querySelector(".lede").textContent = `Sign-in failed: ${err.message}`;
+};
+$("sign-in").addEventListener("click", () => {
+  const provider = new GoogleAuthProvider();
+  (isInstalledApp ? signInWithRedirect : signInWithPopup)(auth, provider).catch(signInFailed);
+});
+getRedirectResult(auth).catch(signInFailed);
 $("sign-out").addEventListener("click", () => signOut(auth));
 $("camera").addEventListener("change", (e) => e.target.files[0] && handleImage(e.target.files[0]));
 $("picker").addEventListener("change", (e) => e.target.files[0] && handleImage(e.target.files[0]));
