@@ -201,6 +201,7 @@ let timelapseGame = null;
 
 function applyTimelapseGame() {
   timelapseGame = resolveSelection(readStore(PIN_KEY), allGames);
+  resetSaveButton();   // a finished video may be for the old selection
 
   // The game line shows only when it differs from what is being played now —
   // "all games" always differs, so it always shows.
@@ -438,10 +439,37 @@ $("tl-view").addEventListener("click", async () => {
   setPlaying(true);
 });
 
+// share() needs a recent tap, and loading and encoding outlast it, so a video
+// that can be shared waits for a second tap on the same button.
+const SAVE_LABEL = $("tl-save").textContent;
+let readyTimelapse = null;   // { file, title }, encoded and not yet shared
+
+function resetSaveButton(label = SAVE_LABEL) {
+  readyTimelapse = null;
+  $("tl-save").textContent = label;
+  if (label === SAVE_LABEL) return;
+  setTimeout(() => {
+    if ($("tl-save").textContent === label) $("tl-save").textContent = SAVE_LABEL;
+  }, 2500);
+}
+
+async function shareTimelapse() {
+  const { file, title } = readyTimelapse;
+  try {
+    await navigator.share({ files: [file], title });
+    resetSaveButton("Saved");
+  } catch (err) {
+    // Dismissing the sheet keeps the video ready for another try.
+    if (err?.name === "AbortError") return;
+    $("recent-note").textContent = `Timelapse failed: ${err.message}`;
+    resetSaveButton();
+  }
+}
+
 $("tl-save").addEventListener("click", async () => {
+  if (readyTimelapse) return shareTimelapse();
   if (!timelapseGame) return;
   const button = $("tl-save");
-  const original = button.textContent;
   button.disabled = true;
 
   try {
@@ -469,22 +497,20 @@ $("tl-save").addEventListener("click", async () => {
 
     // Sharing puts Instagram straight in the sheet; downloading is the fallback.
     if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: timelapseGame.name });
-    } else {
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.click();
-      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+      readyTimelapse = { file, title: timelapseGame.name };
+      button.textContent = "Share timelapse";
+      return;
     }
-    button.textContent = "Saved";
-    setTimeout(() => { button.textContent = original; }, 2500);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    resetSaveButton("Saved");
   } catch (err) {
-    if (err?.name !== "AbortError") {   // the user dismissing the share sheet
-      $("recent-note").textContent = `Timelapse failed: ${err.message}`;
-    }
-    button.textContent = original;
+    $("recent-note").textContent = `Timelapse failed: ${err.message}`;
+    resetSaveButton();
   } finally {
     button.disabled = false;
   }
