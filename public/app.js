@@ -201,7 +201,6 @@ let timelapseGame = null;
 
 function applyTimelapseGame() {
   timelapseGame = resolveSelection(readStore(PIN_KEY), allGames);
-  resetSaveButton();   // a finished video may be for the old selection
 
   // The game line shows only when it differs from what is being played now —
   // "all games" always differs, so it always shows.
@@ -334,6 +333,11 @@ $("game-picker").addEventListener("close", () => {
 const player = {
   frames: [], index: 0, timer: null, playing: false, hideTimer: null, ctx: null,
   painting: false,
+  session: 0,       // bumped on open and close, so late async work can tell it is stale
+  title: "",
+  loading: null,    // Promise of the frames, for the video export to wait on
+  video: null,      // Promise of the exported File, once Save or Share starts one
+  file: null,       // the exported File, once it exists
 };
 
 // Decoded on demand and released immediately. 200ms per frame is ample time to
@@ -377,13 +381,16 @@ function nudgeChrome() {
   const chrome = $("player-chrome");
   chrome.dataset.hidden = "false";
   clearTimeout(player.hideTimer);
+  // Stays up while the video is being made, so its progress and the moment
+  // Share becomes available aren't missed.
+  if (player.video && !player.file) return;
   player.hideTimer = setTimeout(() => { chrome.dataset.hidden = "true"; }, 2500);
 }
 
 function closePlayer() {
   setPlaying(false);
   clearTimeout(player.hideTimer);
-  player.frames = [];
+  resetPlayerSession();
   $("player").hidden = true;
 }
 
@@ -416,104 +423,139 @@ $("tl-view").addEventListener("click", async () => {
   canvas.height = CANVAS_H;
   player.ctx = canvas.getContext("2d");
 
-  $("player-title").textContent = timelapseGame.name;
+  const session = resetPlayerSession();
+  player.title = timelapseGame.name;
+  $("player-title").textContent = player.title;
   $("player").hidden = false;
   nudgeChrome();
   playerStatus("Loading frames…");
 
-  const workouts = await loadTimelapseWorkouts(timelapseGame);
-  if (!workouts.length) return void playerStatus("No photos match that game and date range.");
+  player.loading = (async () => {
+    const workouts = await loadTimelapseWorkouts(timelapseGame);
+    if (!workouts.length) throw new Error("No photos match that game and date range.");
+    const { frames, firstError } = await loadFrameBlobs(workouts, (done, total) => {
+      if (session === player.session) playerStatus(`Loading frames… ${done} / ${total}`);
+    });
+    if (!frames.length) {
+      throw new Error(`Couldn't load any photos. ${firstError?.message ?? ""}`.trim());
+    }
+    return frames;
+  })();
 
-  const loaded = await loadFrameBlobs(workouts,
-    (done, total) => playerStatus(`Loading frames… ${done} / ${total}`));
-  player.frames = loaded.frames;
-
-  if (!player.frames.length) {
-    return void playerStatus(
-      `Couldn't load any photos. ${loaded.firstError?.message ?? ""}`.trim());
+  let frames;
+  try {
+    frames = await player.loading;
+  } catch (err) {
+    if (session === player.session) playerStatus(err.message);
+    return;
   }
+  if (session !== player.session) return;   // closed while loading
 
+  player.frames = frames;
   playerStatus("");
   player.index = 0;
   paint();
   setPlaying(true);
 });
 
-// share() needs a recent tap, and loading and encoding outlast it, so a video
-// that can be shared waits for a second tap on the same button.
-const SAVE_LABEL = $("tl-save").textContent;
-let readyTimelapse = null;   // { file, title }, encoded and not yet shared
+// ---- timelapse export ----------------------------------------------------
+// The video is made at most once per viewing, from the frames the player has
+// already loaded, and only when Save or Share asks for it. share() needs a
+// recent tap and making the video outlasts one, so Share stays disabled until
+// the video exists; a tap on it before then starts making it instead.
+const SAVE_LABEL = $("player-save").textContent;
+const SHARE_LABEL = $("player-share").textContent;
 
-function resetSaveButton(label = SAVE_LABEL) {
-  readyTimelapse = null;
-  $("tl-save").textContent = label;
-  if (label === SAVE_LABEL) return;
-  setTimeout(() => {
-    if ($("tl-save").textContent === label) $("tl-save").textContent = SAVE_LABEL;
-  }, 2500);
+const canShareVideo = () =>
+  navigator.canShare?.({ files: [new File([], "t.mp4", { type: "video/mp4" })] }) ?? false;
+
+function resetPlayerSession() {
+  player.session++;
+  player.frames = [];
+  player.loading = null;
+  player.video = null;
+  player.file = null;
+
+  const exportable = isExportSupported();
+  $("player-save").hidden = !exportable;
+  $("player-share").hidden = !exportable || !canShareVideo();
+  $("player-save").textContent = SAVE_LABEL;
+  $("player-share").textContent = SHARE_LABEL;
+  $("player-share").setAttribute("aria-disabled", "true");
+  return player.session;
 }
 
-async function shareTimelapse() {
-  const { file, title } = readyTimelapse;
-  try {
-    await navigator.share({ files: [file], title });
-    resetSaveButton("Saved");
-  } catch (err) {
-    // Dismissing the sheet keeps the video ready for another try.
-    if (err?.name === "AbortError") return;
-    $("recent-note").textContent = `Timelapse failed: ${err.message}`;
-    resetSaveButton();
-  }
+// `button` shows the progress: whichever of Save or Share started the work.
+function makeVideo(button, verb) {
+  if (player.video) return player.video;
+  const session = player.session;
+  const label = button.textContent;
+  const progress = (text) => { if (session === player.session) button.textContent = text; };
+
+  playerStatus("");
+  player.video = (async () => {
+    progress(`${verb}…`);
+    try {
+      const frames = await player.loading;
+      const blob = await encodeTimelapse(frames.map((f) => ({ load: async () => f.blob })), {
+        onProgress: (done, total, phase) => progress(phase ? `${verb}…` : `${verb} ${done}/${total}`),
+      });
+      const file = new File([blob], timelapseFilename(player.title), { type: "video/mp4" });
+      if (session === player.session) {
+        player.file = file;
+        $("player-share").setAttribute("aria-disabled", "false");
+      }
+      return file;
+    } catch (err) {
+      if (session === player.session) {
+        player.video = null;   // let the next tap try again
+        playerStatus(`Couldn't make the video: ${err.message}`);
+      }
+      throw err;
+    } finally {
+      progress(label);
+      if (session === player.session) nudgeChrome();
+    }
+  })();
+  nudgeChrome();   // after player.video is set, so the chrome stays up
+  return player.video;
 }
 
-$("tl-save").addEventListener("click", async () => {
-  if (readyTimelapse) return shareTimelapse();
-  if (!timelapseGame) return;
-  const button = $("tl-save");
-  button.disabled = true;
+function flashLabel(button, text, label) {
+  button.textContent = text;
+  setTimeout(() => { if (button.textContent === text) button.textContent = label; }, 2500);
+}
 
+// A web page can't write to the gallery directly. A download lands in
+// Downloads, which Android's Files app and Google Photos both pick up.
+let saving = false;
+$("player-save").addEventListener("click", async () => {
+  const button = $("player-save");
+  nudgeChrome();
+  if (saving) return;
+  saving = true;
   try {
-    if (!isExportSupported()) throw new Error("This browser can't encode video.");
-
-    button.textContent = "Loading…";
-    const workouts = await loadTimelapseWorkouts(timelapseGame);
-    if (!workouts.length) throw new Error("No photos match that game and date range.");
-
-    const { frames, firstError } = await loadFrameBlobs(workouts,
-      (done, total) => { button.textContent = `Loading ${done}/${total}`; });
-    if (!frames.length) {
-      throw new Error(`Couldn't load any photos. ${firstError?.message ?? ""}`.trim());
-    }
-
-    // Each frame is decoded inside the encoder, one at a time.
-    const blob = await encodeTimelapse(frames.map((f) => ({ load: async () => f.blob })), {
-      onProgress: (done, total, phase) => {
-        button.textContent = phase ?? `Encoding ${done}/${total}`;
-      },
-    });
-
-    const filename = timelapseFilename(timelapseGame.name);
-    const file = new File([blob], filename, { type: "video/mp4" });
-
-    // Sharing puts Instagram straight in the sheet; downloading is the fallback.
-    if (navigator.canShare?.({ files: [file] })) {
-      readyTimelapse = { file, title: timelapseGame.name };
-      button.textContent = "Share timelapse";
-      return;
-    }
-    const url = URL.createObjectURL(blob);
+    const file = player.file ?? await makeVideo(button, "Saving");
+    const url = URL.createObjectURL(file);
     const link = document.createElement("a");
     link.href = url;
-    link.download = filename;
+    link.download = file.name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    resetSaveButton("Saved");
-  } catch (err) {
-    $("recent-note").textContent = `Timelapse failed: ${err.message}`;
-    resetSaveButton();
+    flashLabel(button, "Saved", SAVE_LABEL);
+  } catch {
+    // makeVideo has already said what went wrong.
   } finally {
-    button.disabled = false;
+    saving = false;
   }
+});
+
+$("player-share").addEventListener("click", () => {
+  nudgeChrome();
+  if (!player.file) return void makeVideo($("player-share"), "Preparing").catch(() => {});
+  navigator.share({ files: [player.file], title: player.title }).catch((err) => {
+    if (err?.name !== "AbortError") playerStatus(`Couldn't share: ${err.message}`);
+  });
 });
 
 // ---- same climb already stored ------------------------------------------

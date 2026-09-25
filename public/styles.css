@@ -266,7 +266,9 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
 .player-chrome[data-hidden="true"] { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .player-chrome { transition: none; } }
 
-.player-top, .player-bottom { display: flex; align-items: center; gap: 0.75rem; }
+.player-top, .player-controls { display: flex; align-items: center; gap: 0.75rem; }
+.player-bottom { display: flex; flex-direction: column; gap: 0.75rem; }
+.player-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
 .player-title { margin: 0; font-weight: 700; flex: 1; font-size: 0.98rem; }
 .player-count { margin: 0; font-size: 0.85rem; color: var(--ink-mute);
   font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
@@ -275,6 +277,9 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
   background: rgba(255,255,255,0.14); color: var(--ink);
   border: 0; border-radius: 8px; padding: 0.45rem 0.85rem; cursor: pointer;
 }
+/* aria-disabled rather than disabled: a tap on Share before the video exists
+   still has to arrive, because it starts making the video. */
+.player-btn[aria-disabled="true"] { opacity: 0.45; }
 .player-track { flex: 1; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); }
 .player-bar { height: 100%; width: 0; border-radius: 2px; background: var(--amber); }
 

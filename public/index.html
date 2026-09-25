@@ -45,7 +45,6 @@
 
     <div id="timelapse-actions" class="tl-actions" hidden>
       <button id="tl-view" class="btn btn-secondary">View timelapse</button>
-      <button id="tl-save" class="btn btn-secondary">Save timelapse</button>
       <button id="tl-pick" class="linkish">Select game for timelapse</button>
     </div>
 
@@ -158,9 +157,15 @@
       <button id="player-close" class="player-btn" aria-label="Close timelapse">Close</button>
     </div>
     <div class="player-bottom">
-      <button id="player-play" class="player-btn" aria-label="Pause">Pause</button>
-      <div class="player-track"><div id="player-bar" class="player-bar"></div></div>
-      <p id="player-count" class="player-count"></p>
+      <div class="player-actions">
+        <button id="player-save" class="player-btn">Save</button>
+        <button id="player-share" class="player-btn" aria-disabled="true">Share</button>
+      </div>
+      <div class="player-controls">
+        <button id="player-play" class="player-btn" aria-label="Pause">Pause</button>
+        <div class="player-track"><div id="player-bar" class="player-bar"></div></div>
+        <p id="player-count" class="player-count"></p>
+      </div>
     </div>
   </div>
   <div id="player-status" class="player-status" hidden></div>
