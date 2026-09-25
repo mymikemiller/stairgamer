@@ -18,6 +18,9 @@
 * { box-sizing: border-box; }
 
 html { -webkit-text-size-adjust: 100%; }
+/* No pull-to-refresh: an accidental pull on the confirmation screen threw away
+   the workout being edited, and relaunching the app already reloads it. */
+html, body { overscroll-behavior-y: none; }
 
 body {
   margin: 0;
@@ -248,6 +251,7 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
 /* ---- fullscreen player ---------------------------------------------- */
 .player {
   position: fixed; inset: 0; z-index: 50;
+  touch-action: none;   /* pulling down is ours: it closes the player */
   background: #000; display: grid; place-items: center;
 }
 .player-canvas { width: 100%; height: 100%; object-fit: contain; display: block; }
@@ -266,9 +270,8 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
 .player-chrome[data-hidden="true"] { opacity: 0; pointer-events: none; }
 @media (prefers-reduced-motion: reduce) { .player-chrome { transition: none; } }
 
-.player-top, .player-controls { display: flex; align-items: center; gap: 0.75rem; }
-.player-bottom { display: flex; flex-direction: column; gap: 0.75rem; }
-.player-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.player-top, .player-bottom { display: flex; align-items: center; gap: 0.75rem; }
+.player-top { gap: 0.5rem; }
 .player-title { margin: 0; font-weight: 700; flex: 1; font-size: 0.98rem; }
 .player-count { margin: 0; font-size: 0.85rem; color: var(--ink-mute);
   font-variant-numeric: tabular-nums; min-width: 4.5rem; text-align: right; }
@@ -277,6 +280,13 @@ dialog::backdrop { background: rgba(10, 12, 22, 0.7); }
   background: rgba(255,255,255,0.14); color: var(--ink);
   border: 0; border-radius: 8px; padding: 0.45rem 0.85rem; cursor: pointer;
 }
+.player-icon { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.6rem; }
+.player-icon svg {
+  width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor;
+  stroke-width: 2; stroke-linecap: round; stroke-linejoin: round;
+}
+.player-btn-text { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.player-btn-text:empty { display: none; }
 /* aria-disabled rather than disabled: a tap on Share before the video exists
    still has to arrive, because it starts making the video. */
 .player-btn[aria-disabled="true"] { opacity: 0.45; }

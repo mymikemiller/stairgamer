@@ -154,18 +154,19 @@
   <div id="player-chrome" class="player-chrome">
     <div class="player-top">
       <p id="player-title" class="player-title"></p>
-      <button id="player-close" class="player-btn" aria-label="Close timelapse">Close</button>
+      <button id="player-save" class="player-btn player-icon" aria-label="Save video">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5M5 20h14"/></svg>
+        <span class="player-btn-text"></span>
+      </button>
+      <button id="player-share" class="player-btn player-icon" aria-label="Share video" aria-disabled="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="2.5"/><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="19" r="2.5"/><path d="m8.2 10.8 7.6-4.5m-7.6 7.4 7.6 4.5"/></svg>
+        <span class="player-btn-text"></span>
+      </button>
     </div>
     <div class="player-bottom">
-      <div class="player-actions">
-        <button id="player-save" class="player-btn">Save</button>
-        <button id="player-share" class="player-btn" aria-disabled="true">Share</button>
-      </div>
-      <div class="player-controls">
-        <button id="player-play" class="player-btn" aria-label="Pause">Pause</button>
-        <div class="player-track"><div id="player-bar" class="player-bar"></div></div>
-        <p id="player-count" class="player-count"></p>
-      </div>
+      <button id="player-play" class="player-btn" aria-label="Pause">Pause</button>
+      <div class="player-track"><div id="player-bar" class="player-bar"></div></div>
+      <p id="player-count" class="player-count"></p>
     </div>
   </div>
   <div id="player-status" class="player-status" hidden></div>

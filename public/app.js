@@ -387,19 +387,69 @@ function nudgeChrome() {
   player.hideTimer = setTimeout(() => { chrome.dataset.hidden = "true"; }, 2500);
 }
 
+// The open player owns a history entry, so the back gesture closes it rather
+// than leaving the app. Every other way of closing goes back through that
+// entry too, so they all end up in hidePlayer and no stale entries pile up.
 function closePlayer() {
+  if (history.state?.player) history.back();
+  else hidePlayer();
+}
+
+window.addEventListener("popstate", () => {
+  if (!$("player").hidden && !history.state?.player) hidePlayer();
+});
+
+// A reload keeps the entry but not the open player; drop the marker so a later
+// back doesn't stop on it.
+if (history.state?.player) history.replaceState(null, "");
+
+function hidePlayer() {
   setPlaying(false);
   clearTimeout(player.hideTimer);
   resetPlayerSession();
   $("player").hidden = true;
+  $("player").style.transition = "";
+  $("player").style.transform = "";
+  $("player").style.opacity = "";
 }
 
-$("player-close").addEventListener("click", closePlayer);
 $("player-play").addEventListener("click", () => { setPlaying(!player.playing); nudgeChrome(); });
 $("player").addEventListener("click", (event) => {
+  if (performance.now() - pull.endedAt < 400) return;   // the end of a pull, not a tap
   // A tap on the chrome activates it; a tap anywhere else only reveals it.
   if (!event.target.closest(".player-btn")) nudgeChrome();
 });
+
+// Pulling the player down closes it. It follows the finger, and springs back
+// if let go before CLOSE_PULL.
+const CLOSE_PULL = 100;   // px
+const pull = { id: null, startY: 0, dy: 0, endedAt: -Infinity };
+
+$("player").addEventListener("pointerdown", (event) => {
+  if (event.target.closest(".player-btn")) return;
+  pull.id = event.pointerId;
+  pull.startY = event.clientY;
+  pull.dy = 0;
+  $("player").setPointerCapture?.(event.pointerId);
+  $("player").style.transition = "none";
+});
+$("player").addEventListener("pointermove", (event) => {
+  if (event.pointerId !== pull.id) return;
+  pull.dy = Math.max(0, event.clientY - pull.startY);
+  $("player").style.transform = `translateY(${pull.dy}px)`;
+  $("player").style.opacity = String(1 - Math.min(pull.dy / 800, 0.4));
+});
+function endPull(event) {
+  if (event.pointerId !== pull.id) return;
+  pull.id = null;
+  if (pull.dy > 8) pull.endedAt = performance.now();
+  if (pull.dy >= CLOSE_PULL && event.type === "pointerup") return closePlayer();
+  $("player").style.transition = "transform 180ms ease, opacity 180ms ease";
+  $("player").style.transform = "";
+  $("player").style.opacity = "";
+}
+$("player").addEventListener("pointerup", endPull);
+$("player").addEventListener("pointercancel", endPull);
 $("player-chrome").addEventListener("focusin", () => {
   clearTimeout(player.hideTimer);
   $("player-chrome").dataset.hidden = "false";
@@ -427,6 +477,7 @@ $("tl-view").addEventListener("click", async () => {
   player.title = timelapseGame.name;
   $("player-title").textContent = player.title;
   $("player").hidden = false;
+  if (!history.state?.player) history.pushState({ player: true }, "");
   nudgeChrome();
   playerStatus("Loading frames…");
 
@@ -463,8 +514,10 @@ $("tl-view").addEventListener("click", async () => {
 // already loaded, and only when Save or Share asks for it. share() needs a
 // recent tap and making the video outlasts one, so Share stays disabled until
 // the video exists; a tap on it before then starts making it instead.
-const SAVE_LABEL = $("player-save").textContent;
-const SHARE_LABEL = $("player-share").textContent;
+// The buttons are icons; this is the text beside one (progress, "Saved").
+const setButtonText = (button, text) => {
+  button.querySelector(".player-btn-text").textContent = text;
+};
 
 const canShareVideo = () =>
   navigator.canShare?.({ files: [new File([], "t.mp4", { type: "video/mp4" })] }) ?? false;
@@ -479,26 +532,25 @@ function resetPlayerSession() {
   const exportable = isExportSupported();
   $("player-save").hidden = !exportable;
   $("player-share").hidden = !exportable || !canShareVideo();
-  $("player-save").textContent = SAVE_LABEL;
-  $("player-share").textContent = SHARE_LABEL;
+  setButtonText($("player-save"), "");
+  setButtonText($("player-share"), "");
   $("player-share").setAttribute("aria-disabled", "true");
   return player.session;
 }
 
 // `button` shows the progress: whichever of Save or Share started the work.
-function makeVideo(button, verb) {
+function makeVideo(button) {
   if (player.video) return player.video;
   const session = player.session;
-  const label = button.textContent;
-  const progress = (text) => { if (session === player.session) button.textContent = text; };
+  const progress = (text) => { if (session === player.session) setButtonText(button, text); };
 
   playerStatus("");
   player.video = (async () => {
-    progress(`${verb}…`);
+    progress("…");
     try {
       const frames = await player.loading;
       const blob = await encodeTimelapse(frames.map((f) => ({ load: async () => f.blob })), {
-        onProgress: (done, total, phase) => progress(phase ? `${verb}…` : `${verb} ${done}/${total}`),
+        onProgress: (done, total, phase) => progress(phase ? "…" : `${done}/${total}`),
       });
       const file = new File([blob], timelapseFilename(player.title), { type: "video/mp4" });
       if (session === player.session) {
@@ -513,7 +565,7 @@ function makeVideo(button, verb) {
       }
       throw err;
     } finally {
-      progress(label);
+      progress("");
       if (session === player.session) nudgeChrome();
     }
   })();
@@ -521,9 +573,11 @@ function makeVideo(button, verb) {
   return player.video;
 }
 
-function flashLabel(button, text, label) {
-  button.textContent = text;
-  setTimeout(() => { if (button.textContent === text) button.textContent = label; }, 2500);
+function flashText(button, text) {
+  setButtonText(button, text);
+  setTimeout(() => {
+    if (button.textContent.trim() === text) setButtonText(button, "");
+  }, 2500);
 }
 
 // A web page can't write to the gallery directly. A download lands in
@@ -535,14 +589,14 @@ $("player-save").addEventListener("click", async () => {
   if (saving) return;
   saving = true;
   try {
-    const file = player.file ?? await makeVideo(button, "Saving");
+    const file = player.file ?? await makeVideo(button);
     const url = URL.createObjectURL(file);
     const link = document.createElement("a");
     link.href = url;
     link.download = file.name;
     link.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
-    flashLabel(button, "Saved", SAVE_LABEL);
+    flashText(button, "Saved");
   } catch {
     // makeVideo has already said what went wrong.
   } finally {
@@ -552,7 +606,7 @@ $("player-save").addEventListener("click", async () => {
 
 $("player-share").addEventListener("click", () => {
   nudgeChrome();
-  if (!player.file) return void makeVideo($("player-share"), "Preparing").catch(() => {});
+  if (!player.file) return void makeVideo($("player-share")).catch(() => {});
   navigator.share({ files: [player.file], title: player.title }).catch((err) => {
     if (err?.name !== "AbortError") playerStatus(`Couldn't share: ${err.message}`);
   });

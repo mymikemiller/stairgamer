@@ -81,9 +81,42 @@ describe("app.js", () => {
     vi.restoreAllMocks();
   });
 
-  it("has no Save timelapse button outside the player", async () => {
+  it("has no Save timelapse button outside the player, and no Close button in it", async () => {
     await loadApp({ installed: false });
     expect(document.getElementById("tl-save")).toBeNull();
+    expect(document.getElementById("player-close")).toBeNull();
+  });
+
+  const pointer = (type: string, clientY: number) =>
+    Object.assign(new Event(type, { bubbles: true }), { pointerId: 1, clientY });
+
+  it("pulling the player down closes it", async () => {
+    await openPlayer();
+    const canvas = document.getElementById("player-canvas")!;
+    canvas.dispatchEvent(pointer("pointerdown", 100));
+    canvas.dispatchEvent(pointer("pointermove", 180));
+    expect(document.getElementById("player")!.style.transform).toBe("translateY(80px)");
+    canvas.dispatchEvent(pointer("pointermove", 260));
+    canvas.dispatchEvent(pointer("pointerup", 260));
+    await vi.waitFor(() => expect(document.getElementById("player")!.hidden).toBe(true));
+    expect(history.state?.player).toBeFalsy();   // its history entry is gone too
+  });
+
+  it("back closes the player instead of leaving the app", async () => {
+    await openPlayer();
+    expect(history.state?.player).toBe(true);
+    history.back();
+    await vi.waitFor(() => expect(document.getElementById("player")!.hidden).toBe(true));
+  });
+
+  it("a short pull springs back instead of closing", async () => {
+    await openPlayer();
+    const canvas = document.getElementById("player-canvas")!;
+    canvas.dispatchEvent(pointer("pointerdown", 100));
+    canvas.dispatchEvent(pointer("pointermove", 150));
+    canvas.dispatchEvent(pointer("pointerup", 150));
+    expect(document.getElementById("player")!.hidden).toBe(false);
+    expect(document.getElementById("player")!.style.transform).toBe("");
   });
 
   it("Save makes the video and downloads it", async () => {
@@ -92,7 +125,7 @@ describe("app.js", () => {
     await vi.waitFor(() => expect(download).toHaveBeenCalledTimes(1));
     const link = download.mock.contexts[0] as HTMLAnchorElement;
     expect(link.download).toMatch(/\.mp4$/);
-    expect(save.textContent).toBe("Saved");
+    expect(save.textContent!.trim()).toBe("Saved");
     expect(share).not.toHaveBeenCalled();
   });
 
@@ -105,7 +138,7 @@ describe("app.js", () => {
     shareButton.click();
     expect(share).not.toHaveBeenCalled();
     await vi.waitFor(() => expect(shareButton.getAttribute("aria-disabled")).toBe("false"));
-    expect(shareButton.textContent).toBe("Share");
+    expect(shareButton.textContent!.trim()).toBe("");   // progress cleared
 
     shareButton.click();
     expect(share).toHaveBeenCalledTimes(1);
