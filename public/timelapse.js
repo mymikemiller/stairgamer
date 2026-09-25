@@ -11,7 +11,7 @@ import { candidatesFor } from "/lib/avcLevel.js";
 // Portrait, sized for Instagram and YouTube Shorts.
 export const CANVAS_W = 1080;
 export const CANVAS_H = 1920;
-export const FRAME_MS = 400;
+export const FRAME_MS = 200;
 const FPS = 30;
 const BITRATE = 2_500_000;
 

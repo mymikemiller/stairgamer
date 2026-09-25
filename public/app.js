@@ -336,7 +336,7 @@ const player = {
   painting: false,
 };
 
-// Decoded on demand and released immediately. 400ms per frame is ample time to
+// Decoded on demand and released immediately. 200ms per frame is ample time to
 // decode a 1080px JPEG, and it keeps one bitmap alive instead of hundreds.
 async function paint() {
   const frame = player.frames[player.index];
